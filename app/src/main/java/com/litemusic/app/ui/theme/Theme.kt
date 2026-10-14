@@ -1,64 +1,116 @@
 package com.litemusic.app.ui.theme
 
+import android.content.Context
 import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-private val OledDefaultDarkColorScheme = darkColorScheme(
-    primary = MintPrimary,
-    onPrimary = MintOnPrimary,
-    primaryContainer = MintPrimaryContainer,
-    onPrimaryContainer = MintOnPrimaryContainer,
+enum class AppThemeMode(val displayName: String) {
+    DARK_OLED("Tối OLED (Đen tuyệt đối)"),
+    DARK_STANDARD("Tối tiêu chuẩn M3"),
+    LIGHT("Sáng (Light Mode)"),
+    SYSTEM("Theo hệ thống")
+}
 
-    secondary = MintSecondary,
-    secondaryContainer = MintSecondaryContainer,
-    onSecondaryContainer = MintOnSecondaryContainer,
+enum class AppColorPalette(val displayName: String, val seedColor: Color) {
+    SYSTEM_MONET("Hệ thống (Monet)", Color(0xFF52E196)),
+    MINT("Botanical Mint", MintPrimaryDark),
+    SAPPHIRE("Sapphire Blue", SapphirePrimaryDark),
+    AMETHYST("Amethyst Purple", AmethystPrimaryDark),
+    AMBER("Amber Sunset", AmberPrimaryDark),
+    ROSE("Rose Ruby", RosePrimaryDark),
+    OCEAN("Ocean Cyan", OceanPrimaryDark)
+}
 
-    tertiary = MintTertiary,
-    tertiaryContainer = MintTertiaryContainer,
+enum class AppThemeStyle(val displayName: String) {
+    MATERIAL_3("Material 3 Tiêu chuẩn"),
+    LIQUID_GLASS("Liquid Glass (iOS Glass x M3)")
+}
 
-    background = OledBlack,
-    surface = OledBlack,
-    surfaceContainerLowest = OledSurfaceContainerLowest,
-    surfaceContainerLow = OledSurfaceContainerLow,
-    surfaceContainer = OledSurfaceContainer,
-    surfaceContainerHigh = OledSurfaceContainerHigh,
-    surfaceContainerHighest = OledSurfaceContainerHighest,
-
-    outline = M3Outline,
-    outlineVariant = M3OutlineVariant,
-    onSurface = M3OnSurface,
-    onSurfaceVariant = M3OnSurfaceVariant
-)
+val LocalThemeStyle = staticCompositionLocalOf { AppThemeStyle.MATERIAL_3 }
+val LocalIsOled = staticCompositionLocalOf { true }
 
 @Composable
 fun LiteMusicTheme(
-    dynamicColor: Boolean = true,
+    themeMode: AppThemeMode = AppThemeMode.DARK_OLED,
+    colorPalette: AppColorPalette = AppColorPalette.SYSTEM_MONET,
+    themeStyle: AppThemeStyle = AppThemeStyle.MATERIAL_3,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
+    val systemInDark = isSystemInDarkTheme()
 
-    // Android 12+ (API 31+) Dynamic Color (Monet Engine)
-    val baseScheme = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        dynamicDarkColorScheme(context)
-    } else {
-        OledDefaultDarkColorScheme
+    val isDark = when (themeMode) {
+        AppThemeMode.DARK_OLED -> true
+        AppThemeMode.DARK_STANDARD -> true
+        AppThemeMode.LIGHT -> false
+        AppThemeMode.SYSTEM -> systemInDark
     }
 
-    // Force Pure OLED Black for surfaces while retaining dynamic primary & tonal accents
-    val oledDynamicScheme = baseScheme.copy(
-        background = OledBlack,
-        surface = OledBlack,
-        surfaceContainerLowest = OledSurfaceContainerLowest,
-        surfaceContainerLow = OledSurfaceContainerLow,
-        surfaceContainer = OledSurfaceContainer,
-        surfaceContainerHigh = OledSurfaceContainerHigh,
-        surfaceContainerHighest = OledSurfaceContainerHighest
-    )
+    val isOled = themeMode == AppThemeMode.DARK_OLED && isDark
 
-    MaterialTheme(
-        colorScheme = oledDynamicScheme,
-        content = content
-    )
+    // Android 12+ (API 31+) Monet wallpaper dynamic scheme or static curated palettes
+    val baseScheme: ColorScheme = if (colorPalette == AppColorPalette.SYSTEM_MONET && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else {
+        when (colorPalette) {
+            AppColorPalette.MINT, AppColorPalette.SYSTEM_MONET -> if (isDark) MintDarkScheme else MintLightScheme
+            AppColorPalette.SAPPHIRE -> if (isDark) SapphireDarkScheme else SapphireLightScheme
+            AppColorPalette.AMETHYST -> if (isDark) AmethystDarkScheme else AmethystLightScheme
+            AppColorPalette.AMBER -> if (isDark) AmberDarkScheme else AmberLightScheme
+            AppColorPalette.ROSE -> if (isDark) RoseDarkScheme else RoseLightScheme
+            AppColorPalette.OCEAN -> if (isDark) OceanDarkScheme else OceanLightScheme
+        }
+    }
+
+    val finalColorScheme = when {
+        isOled -> baseScheme.copy(
+            background = OledBlack,
+            surface = OledBlack,
+            surfaceContainerLowest = OledSurfaceContainerLowest,
+            surfaceContainerLow = OledSurfaceContainerLow,
+            surfaceContainer = OledSurfaceContainer,
+            surfaceContainerHigh = OledSurfaceContainerHigh,
+            surfaceContainerHighest = OledSurfaceContainerHighest
+        )
+        themeStyle == AppThemeStyle.LIQUID_GLASS -> {
+            if (isDark) {
+                baseScheme.copy(
+                    background = Color(0xFF090D14),
+                    surface = GlassSurfaceDark,
+                    surfaceContainerLowest = Color(0x1F1A2230),
+                    surfaceContainerLow = Color(0x2E1E2636),
+                    surfaceContainer = GlassSurfaceDark,
+                    surfaceContainerHigh = Color(0x40323E52),
+                    surfaceContainerHighest = Color(0x52415068)
+                )
+            } else {
+                baseScheme.copy(
+                    background = Color(0xFFEDF2F7),
+                    surface = GlassSurfaceLight,
+                    surfaceContainerLowest = Color(0x80FFFFFF),
+                    surfaceContainerLow = Color(0x99FFFFFF),
+                    surfaceContainer = GlassSurfaceLight,
+                    surfaceContainerHigh = Color(0xB3FFFFFF),
+                    surfaceContainerHighest = Color(0xCCFFFFFF)
+                )
+            }
+        }
+        else -> baseScheme
+    }
+
+    CompositionLocalProvider(
+        LocalThemeStyle provides themeStyle,
+        LocalIsOled provides isOled
+    ) {
+        MaterialTheme(
+            colorScheme = finalColorScheme,
+            content = content
+        )
+    }
 }

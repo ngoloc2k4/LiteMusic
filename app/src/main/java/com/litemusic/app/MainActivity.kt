@@ -52,7 +52,11 @@ import com.litemusic.app.core.model.Song
 import com.litemusic.app.core.resolver.SoundCloudStreamResolver
 import com.litemusic.app.core.resolver.SpotifyMetadataBridge
 import com.litemusic.app.core.resolver.YouTubeStreamResolver
+import com.litemusic.app.ui.settings.SettingsScreen
 import com.litemusic.app.ui.theme.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.graphics.Brush
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -76,11 +80,49 @@ class MainActivity : ComponentActivity() {
         initMediaController()
 
         setContent {
-            LiteMusicTheme(dynamicColor = true) {
+            var themeMode by remember { mutableStateOf(ThemePreferences.getThemeMode(this)) }
+            var colorPalette by remember { mutableStateOf(ThemePreferences.getColorPalette(this)) }
+            var themeStyle by remember { mutableStateOf(ThemePreferences.getThemeStyle(this)) }
+            var isDspEnabled by remember { mutableStateOf(ThemePreferences.getDspEnabled(this)) }
+
+            LiteMusicTheme(
+                themeMode = themeMode,
+                colorPalette = colorPalette,
+                themeStyle = themeStyle
+            ) {
                 MainAppScreen(
                     mediaController = mediaController,
                     lyrics = activeLyrics,
                     isResolving = isResolvingStream,
+                    currentThemeMode = themeMode,
+                    onThemeModeChange = {
+                        themeMode = it
+                        ThemePreferences.setThemeMode(this, it)
+                    },
+                    currentColorPalette = colorPalette,
+                    onColorPaletteChange = {
+                        colorPalette = it
+                        ThemePreferences.setColorPalette(this, it)
+                    },
+                    currentThemeStyle = themeStyle,
+                    onThemeStyleChange = {
+                        themeStyle = it
+                        ThemePreferences.setThemeStyle(this, it)
+                    },
+                    isDspEnabled = isDspEnabled,
+                    onDspToggle = {
+                        isDspEnabled = it
+                        ThemePreferences.setDspEnabled(this, it)
+                    },
+                    onClearCache = {
+                        try {
+                            val cDir = File(cacheDir, "media_cache")
+                            if (cDir.exists()) cDir.deleteRecursively()
+                            Toast.makeText(this, "Đã dọn dẹp 250MB bộ nhớ đệm!", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "Đã dọn dẹp!", Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     onPlaySong = { song -> playSong(song) },
                     onSearch = { query, source -> searchSongs(query, source) },
                     onSeek = { positionMs -> mediaController?.seekTo(positionMs) }
@@ -158,6 +200,15 @@ fun MainAppScreen(
     mediaController: MediaController?,
     lyrics: List<LyricLine>,
     isResolving: Boolean,
+    currentThemeMode: AppThemeMode,
+    onThemeModeChange: (AppThemeMode) -> Unit,
+    currentColorPalette: AppColorPalette,
+    onColorPaletteChange: (AppColorPalette) -> Unit,
+    currentThemeStyle: AppThemeStyle,
+    onThemeStyleChange: (AppThemeStyle) -> Unit,
+    isDspEnabled: Boolean,
+    onDspToggle: (Boolean) -> Unit,
+    onClearCache: () -> Unit,
     onPlaySong: (Song) -> Unit,
     onSearch: suspend (String, AudioSource) -> List<Song>,
     onSeek: (Long) -> Unit
@@ -241,13 +292,29 @@ fun MainAppScreen(
         isPlayerSheetOpen = false
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    val isGlass = currentThemeStyle == AppThemeStyle.LIQUID_GLASS
+
+    val bgModifier = if (isGlass) {
+        Modifier.fillMaxSize().background(
+            Brush.verticalGradient(
+                listOf(
+                    MaterialTheme.colorScheme.background,
+                    MaterialTheme.colorScheme.background.copy(alpha = 0.94f),
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                )
+            )
+        )
+    } else {
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+    }
+
+    Box(modifier = bgModifier) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            containerColor = MaterialTheme.colorScheme.background,
+            containerColor = Color.Transparent,
             bottomBar = {
                 NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    containerColor = if (isGlass) GlassBottomNavDark.copy(alpha = 0.85f) else MaterialTheme.colorScheme.surfaceContainerLowest,
                     tonalElevation = 0.dp,
                     modifier = Modifier.height(72.dp)
                 ) {
@@ -279,48 +346,81 @@ fun MainAppScreen(
                     .fillMaxSize()
                     .padding(horizontal = 16.dp)
             ) {
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Top Bar
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("♫", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                if (selectedNavTab == 3) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        SettingsScreen(
+                            currentThemeMode = currentThemeMode,
+                            onThemeModeChange = onThemeModeChange,
+                            currentColorPalette = currentColorPalette,
+                            onColorPaletteChange = onColorPaletteChange,
+                            currentThemeStyle = currentThemeStyle,
+                            onThemeStyleChange = onThemeStyleChange,
+                            isDspEnabled = isDspEnabled,
+                            onDspToggle = onDspToggle,
+                            onClearCache = onClearCache
+                        )
+                        if (currentTitle.isNotEmpty()) {
+                            Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)) {
+                                M3MiniPlayer(
+                                    title = currentTitle,
+                                    artist = currentArtist,
+                                    artworkUrl = currentArtwork,
+                                    isPlaying = isPlaying,
+                                    isResolving = isResolving,
+                                    onPlayPause = {
+                                        mediaController?.let {
+                                            if (it.isPlaying) it.pause() else it.play()
+                                        }
+                                    },
+                                    onNext = { mediaController?.seekToNextMediaItem() },
+                                    onClick = { isPlayerSheetOpen = true }
+                                )
+                            }
                         }
-                        Text(
-                            text = "LiteMusic",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
                     }
+                } else {
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    // Top Bar
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "⚡ -14 LUFS DSP",
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
-                    }
-                }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("♫", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                            Text(
+                                text = "LiteMusic",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Text(
+                                text = if (isDspEnabled) "⚡ -14 LUFS DSP" else "⚡ DSP OFF",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isDspEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
 
                 // M3 Search Bar
                 OutlinedTextField(
@@ -530,6 +630,7 @@ fun MainAppScreen(
                 }
             }
         }
+    }
 
         // Full Screen Player Sheet with Synced Lyrics
         AnimatedVisibility(
@@ -559,14 +660,15 @@ fun MainAppScreen(
 
 @Composable
 fun QuickPickTile(song: Song, onClick: () -> Unit) {
+    val isGlass = LocalThemeStyle.current == AppThemeStyle.LIQUID_GLASS
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .clickable { onClick() },
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = CardDefaults.outlinedCardBorder()
+        color = if (isGlass) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow,
+        border = if (isGlass) BorderStroke(1.dp, GlassBorderDark) else CardDefaults.outlinedCardBorder()
     ) {
         Row(
             modifier = Modifier.padding(6.dp).fillMaxWidth(),
@@ -596,12 +698,16 @@ fun QuickPickTile(song: Song, onClick: () -> Unit) {
 
 @Composable
 fun AlbumGridCard(song: Song, onClick: () -> Unit) {
+    val isGlass = LocalThemeStyle.current == AppThemeStyle.LIQUID_GLASS
     Card(
         modifier = Modifier
             .width(132.dp)
             .clip(RoundedCornerShape(16.dp))
             .clickable { onClick() },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isGlass) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        border = if (isGlass) BorderStroke(1.dp, GlassBorderDark) else CardDefaults.outlinedCardBorder(),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
@@ -644,12 +750,16 @@ fun AlbumGridCard(song: Song, onClick: () -> Unit) {
 
 @Composable
 fun SongListCard(song: Song, onClick: () -> Unit) {
+    val isGlass = LocalThemeStyle.current == AppThemeStyle.LIQUID_GLASS
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .clickable { onClick() },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isGlass) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        border = if (isGlass) BorderStroke(1.dp, GlassBorderDark) else CardDefaults.outlinedCardBorder(),
         shape = RoundedCornerShape(14.dp)
     ) {
         Row(
@@ -699,15 +809,16 @@ fun M3MiniPlayer(
     onNext: () -> Unit,
     onClick: () -> Unit
 ) {
+    val isGlass = LocalThemeStyle.current == AppThemeStyle.LIQUID_GLASS
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .height(58.dp)
             .clip(RoundedCornerShape(24.dp))
             .clickable { onClick() },
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = if (isGlass) Color(0xD9121720) else MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 6.dp,
-        border = CardDefaults.outlinedCardBorder()
+        border = if (isGlass) BorderStroke(1.2.dp, GlassBorderDark) else CardDefaults.outlinedCardBorder()
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp).fillMaxWidth(),

@@ -50,40 +50,101 @@
     --md-sys-color-primary-container: #00522e;
     --md-sys-color-on-primary-container: #77feaf;
   }
-  body[data-palette="cyan"] {
-    --md-sys-color-primary: #63d3ff;
-    --md-sys-color-primary-rgb: 99, 211, 255;
-    --md-sys-color-on-primary: #003547;
-    --md-sys-color-primary-container: #004d67;
-    --md-sys-color-on-primary-container: #bde9ff;
+  body[data-palette="sapphire"] {
+    --md-sys-color-primary: #9ecaff;
+    --md-sys-color-primary-rgb: 158, 202, 255;
+    --md-sys-color-on-primary: #003258;
+    --md-sys-color-primary-container: #00497d;
+    --md-sys-color-on-primary-container: #d1e4ff;
   }
-  body[data-palette="lavender"] {
-    --md-sys-color-primary: #d1bcff;
-    --md-sys-color-primary-rgb: 209, 188, 255;
+  body[data-palette="amethyst"] {
+    --md-sys-color-primary: #d0bcff;
+    --md-sys-color-primary-rgb: 208, 188, 255;
     --md-sys-color-on-primary: #381e72;
     --md-sys-color-primary-container: #4f378b;
     --md-sys-color-on-primary-container: #eaddff;
   }
-  body[data-palette="coral"] {
-    --md-sys-color-primary: #ffb4a8;
-    --md-sys-color-primary-rgb: 255, 180, 168;
-    --md-sys-color-on-primary: #690005;
-    --md-sys-color-primary-container: #880008;
-    --md-sys-color-on-primary-container: #ffdad4;
+  body[data-palette="rose"] {
+    --md-sys-color-primary: #ffb2b8;
+    --md-sys-color-primary-rgb: 255, 178, 184;
+    --md-sys-color-on-primary: #660020;
+    --md-sys-color-primary-container: #8f0030;
+    --md-sys-color-on-primary-container: #ffd9dc;
   }
   body[data-palette="amber"] {
-    --md-sys-color-primary: #ffb951;
-    --md-sys-color-primary-rgb: 255, 185, 81;
-    --md-sys-color-on-primary: #452b00;
-    --md-sys-color-primary-container: #633f00;
-    --md-sys-color-on-primary-container: #ffddb3;
+    --md-sys-color-primary: #ffb77c;
+    --md-sys-color-primary-rgb: 255, 183, 124;
+    --md-sys-color-on-primary: #4d2700;
+    --md-sys-color-primary-container: #6d3a00;
+    --md-sys-color-on-primary-container: #ffdcbe;
   }
-  body[data-palette="mono"] {
-    --md-sys-color-primary: #e6e6e6;
-    --md-sys-color-primary-rgb: 230, 230, 230;
-    --md-sys-color-on-primary: #121212;
-    --md-sys-color-primary-container: #333333;
-    --md-sys-color-on-primary-container: #ffffff;
+  body[data-palette="ocean"] {
+    --md-sys-color-primary: #4fd8eb;
+    --md-sys-color-primary-rgb: 79, 216, 235;
+    --md-sys-color-on-primary: #00363f;
+    --md-sys-color-primary-container: #004e5a;
+    --md-sys-color-on-primary-container: #98f0ff;
+  }
+
+  /* Theme Modes */
+  body[data-mode="oled"] {
+    --md-sys-color-background: #000000;
+    --md-sys-color-surface: #000000;
+    --md-sys-color-surface-container-low: #0b0b0b;
+    --md-sys-color-surface-container-high: #1a1a1a;
+    --md-sys-color-surface-container-highest: #242424;
+    --md-sys-color-on-surface: #e1e3de;
+    --md-sys-color-on-surface-variant: #c1c9bf;
+  }
+  body[data-mode="dark"] {
+    --md-sys-color-background: #111418;
+    --md-sys-color-surface: #111418;
+    --md-sys-color-surface-container-low: #191c20;
+    --md-sys-color-surface-container-high: #272a2f;
+    --md-sys-color-surface-container-highest: #33363b;
+    --md-sys-color-on-surface: #e2e2e6;
+    --md-sys-color-on-surface-variant: #c4c7c5;
+  }
+  body[data-mode="light"] {
+    --md-sys-color-background: #f8f9fa;
+    --md-sys-color-surface: #f8f9fa;
+    --md-sys-color-surface-container-low: #ffffff;
+    --md-sys-color-surface-container-high: #e9ecef;
+    --md-sys-color-surface-container-highest: #dee2e6;
+    --md-sys-color-on-surface: #1a1c1e;
+    --md-sys-color-on-surface-variant: #444746;
+  }
+
+  /* Liquid Glass Style (iOS Frosted Glass x M3) */
+  body[data-style="liquid-glass"] .device-frame {
+    background: linear-gradient(145deg, #090d14 0%, #0d121c 50%, rgba(var(--md-sys-color-primary-rgb), 0.15) 100%) !important;
+  }
+  body[data-style="liquid-glass"] .m3-quick-card,
+  body[data-style="liquid-glass"] .visual-album-card,
+  body[data-style="liquid-glass"] .m3-track-item,
+  body[data-style="liquid-glass"] .m3-mini-player,
+  body[data-style="liquid-glass"] .m3-search-bar,
+  body[data-style="liquid-glass"] .m3-bottom-nav,
+  body[data-style="liquid-glass"] .lyrics-preview-card {
+    background: rgba(255, 255, 255, 0.07) !important;
+    backdrop-filter: blur(18px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(180%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
+  }
+  body[data-style="liquid-glass"][data-mode="light"] .device-frame {
+    background: linear-gradient(145deg, #edf2f7 0%, #e2e8f0 50%, rgba(var(--md-sys-color-primary-rgb), 0.12) 100%) !important;
+  }
+  body[data-style="liquid-glass"][data-mode="light"] .m3-quick-card,
+  body[data-style="liquid-glass"][data-mode="light"] .visual-album-card,
+  body[data-style="liquid-glass"][data-mode="light"] .m3-track-item,
+  body[data-style="liquid-glass"][data-mode="light"] .m3-mini-player,
+  body[data-style="liquid-glass"][data-mode="light"] .m3-search-bar,
+  body[data-style="liquid-glass"][data-mode="light"] .m3-bottom-nav,
+  body[data-style="liquid-glass"][data-mode="light"] .lyrics-preview-card {
+    background: rgba(255, 255, 255, 0.65) !important;
+    border: 1px solid rgba(255, 255, 255, 0.8) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08) !important;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
@@ -751,21 +812,35 @@
   }
 </style>
 </head>
-<body data-palette="mint">
+<body data-palette="mint" data-mode="oled" data-style="material-3">
 
   <!-- Monet Studio Dynamic Color Bar -->
   <div class="monet-studio-bar">
     <div class="studio-header">
-      <span class="studio-title">Android 12+ Monet Engine</span>
+      <span class="studio-title">Android 12+ Monet & Theme Studio</span>
       <span class="monet-tag" id="active-palette-name">🌿 Mint Green</span>
     </div>
+
+    <!-- Mode Selector -->
+    <div style="display:flex; gap:6px; margin-bottom:10px;">
+      <button class="mode-btn active" id="btn-mode-oled" onclick="setThemeMode('oled', this)" style="flex:1; padding:6px 0; border-radius:10px; background:#1b1f26; border:1px solid #333; color:#fff; font-size:11px; font-weight:700; cursor:pointer;">🌑 OLED Black</button>
+      <button class="mode-btn" id="btn-mode-dark" onclick="setThemeMode('dark', this)" style="flex:1; padding:6px 0; border-radius:10px; background:#1b1f26; border:1px solid #333; color:#94a3b8; font-size:11px; font-weight:700; cursor:pointer;">🌙 M3 Dark</button>
+      <button class="mode-btn" id="btn-mode-light" onclick="setThemeMode('light', this)" style="flex:1; padding:6px 0; border-radius:10px; background:#1b1f26; border:1px solid #333; color:#94a3b8; font-size:11px; font-weight:700; cursor:pointer;">☀️ M3 Light</button>
+    </div>
+
+    <!-- Style Selector -->
+    <div style="display:flex; gap:6px; margin-bottom:12px;">
+      <button class="style-btn active" id="btn-style-m3" onclick="setThemeStyle('material-3', this)" style="flex:1; padding:6px 0; border-radius:10px; background:#1b1f26; border:1px solid #333; color:#fff; font-size:11px; font-weight:700; cursor:pointer;">📐 Material 3 Chuẩn</button>
+      <button class="style-btn" id="btn-style-glass" onclick="setThemeStyle('liquid-glass', this)" style="flex:1; padding:6px 0; border-radius:10px; background:#1b1f26; border:1px solid #333; color:#94a3b8; font-size:11px; font-weight:700; cursor:pointer;">✨ Liquid Glass (iOS x M3)</button>
+    </div>
+
     <div class="palette-swatches">
-      <button class="swatch-btn active" style="background:#52e196" onclick="setPalette('mint', '🌿 Mint Green (Botany)', this)" title="Mint"></button>
-      <button class="swatch-btn" style="background:#63d3ff" onclick="setPalette('cyan', '🌊 Ocean Cyan (Sky)', this)" title="Cyan"></button>
-      <button class="swatch-btn" style="background:#d1bcff" onclick="setPalette('lavender', '💜 Lavender Violet', this)" title="Lavender"></button>
-      <button class="swatch-btn" style="background:#ffb4a8" onclick="setPalette('coral', '🌸 Coral Sakura', this)" title="Coral"></button>
-      <button class="swatch-btn" style="background:#ffb951" onclick="setPalette('amber', '🍂 Amber Gold (Warm)', this)" title="Amber"></button>
-      <button class="swatch-btn" style="background:#e6e6e6; color:#000" onclick="setPalette('mono', '⚪ Pure Monochrome', this)" title="Monochrome">M</button>
+      <button class="swatch-btn active" style="background:#52e196" onclick="setPalette('mint', '🌿 Botanical Mint', this)" title="Mint"></button>
+      <button class="swatch-btn" style="background:#9ecaff" onclick="setPalette('sapphire', '💎 Sapphire Blue', this)" title="Sapphire"></button>
+      <button class="swatch-btn" style="background:#d0bcff" onclick="setPalette('amethyst', '🔮 Amethyst Purple', this)" title="Amethyst"></button>
+      <button class="swatch-btn" style="background:#ffb2b8" onclick="setPalette('rose', '🌸 Rose Ruby', this)" title="Rose"></button>
+      <button class="swatch-btn" style="background:#ffb77c" onclick="setPalette('amber', '🍂 Amber Sunset', this)" title="Amber"></button>
+      <button class="swatch-btn" style="background:#4fd8eb" onclick="setPalette('ocean', '🌊 Ocean Cyan', this)" title="Ocean"></button>
     </div>
   </div>
 
@@ -1066,6 +1141,26 @@
       document.getElementById('active-palette-name').innerText = name;
       document.querySelectorAll('.swatch-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+    }
+
+    function setThemeMode(mode, btn) {
+      document.body.setAttribute('data-mode', mode);
+      document.querySelectorAll('.mode-btn').forEach(b => {
+        b.classList.remove('active');
+        b.style.color = '#94a3b8';
+      });
+      btn.classList.add('active');
+      btn.style.color = '#ffffff';
+    }
+
+    function setThemeStyle(style, btn) {
+      document.body.setAttribute('data-style', style);
+      document.querySelectorAll('.style-btn').forEach(b => {
+        b.classList.remove('active');
+        b.style.color = '#94a3b8';
+      });
+      btn.classList.add('active');
+      btn.style.color = '#ffffff';
     }
 
     function toggleChip(chip) {

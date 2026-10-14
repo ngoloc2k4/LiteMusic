@@ -6,15 +6,15 @@ on:
       - main
       - master
       - dev
-      - '**'
-    tags:
-      - 'v*'
   pull_request:
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -61,6 +61,8 @@ jobs:
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           DEST_NAME="LiteMusic-${SHORT_SHA}-release.apk"
           cp "$APK_PATH" "$DEST_NAME"
+          # Also copy standard name for rolling release
+          cp "$APK_PATH" "LiteMusic-beta.apk"
           echo "apk_path=$DEST_NAME" >> $GITHUB_OUTPUT
           echo "Found and prepared: $DEST_NAME"
 
@@ -72,11 +74,18 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Create Release for Tag
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish or Update Rolling Beta Release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.prepare_artifact.outputs.apk_path }}
-          generate_release_notes: true
+          tag_name: beta
+          name: "LiteMusic Beta (Latest Build)"
+          body: |
+            Automated rolling release for latest commit: `${{ github.sha }}`.
+            Download the pre-signed APK below to install or update directly.
+          prerelease: true
+          files: |
+            LiteMusic-beta.apk
+            ${{ steps.prepare_artifact.outputs.apk_path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

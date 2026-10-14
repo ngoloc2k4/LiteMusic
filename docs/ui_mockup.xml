@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android Layout Blueprint for LiteMusic
+    Demonstrates the structural hierarchy for Jetpack Compose / Android XML
+-->
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0D0F12">
+
+    <!-- Top App Bar & Search Container -->
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent">
+
+        <!-- Header: Brand Logo & Loudness DSP Badge -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="LiteMusic"
+                android:textColor="#FFFFFF"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <!-- Hardware DSP Volume Normalizer Indicator -->
+            <TextView
+                android:id="@+id/badgeLoudness"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_dsp_chip"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:text="⚡ -14 LUFS DSP"
+                android:textColor="#1ED760"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Multi-Source Selector Chips -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:paddingHorizontal="16dp"
+            android:paddingBottom="8dp">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/sourceChipGroup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:singleSelection="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipYtMusic"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="YouTube Music (Opus)" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipSoundCloud"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SoundCloud" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipSpotify"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Spotify Bridge" />
+            </com.google.android.material.chip.ChipGroup>
+        </HorizontalScrollView>
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <!-- Main Song List & Search Results -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerSongs"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:paddingHorizontal="16dp"
+        android:clipToPadding="false"
+        android:paddingBottom="140dp"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior"
+        tools:listitem="@layout/item_song" />
+
+    <!-- Bottom Floating Mini-Player -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/miniPlayerCard"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:layout_gravity="bottom"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginBottom="64dp"
+        app:cardCornerRadius="14dp"
+        app:cardElevation="8dp"
+        app:cardBackgroundColor="#1F242D">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="12dp">
+
+            <ImageView
+                android:id="@+id/imgMiniArtwork"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:scaleType="centerCrop" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="12dp">
+
+                <TextView
+                    android:id="@+id/txtMiniTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Die With A Smile"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:singleLine="true" />
+
+                <TextView
+                    android:id="@+id/txtMiniArtist"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Lady Gaga, Bruno Mars"
+                    android:textColor="#9AA0A6"
+                    android:textSize="12sp"
+                    android:singleLine="true" />
+            </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/btnMiniPlayPause"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_circle_primary"
+                android:src="@drawable/ic_play"
+                android:tint="#000000" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- Bottom Navigation Bar -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_gravity="bottom"
+        android:background="#161A20"
+        app:menu="@menu/bottom_nav_menu" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

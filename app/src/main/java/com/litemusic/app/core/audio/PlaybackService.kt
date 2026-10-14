@@ -26,7 +26,11 @@ class PlaybackService : MediaSessionService() {
             .setUsage(C.USAGE_MEDIA)
             .build()
 
+        val cacheDataSourceFactory = AudioCacheManager.buildCacheDataSourceFactory(this)
+        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory)
+
         player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .setHandleAudioBecomingNoisy(true) // Auto pause when unplugging headphones
             .setWakeMode(C.WAKE_MODE_NETWORK) // Keep CPU & Wifi active while streaming

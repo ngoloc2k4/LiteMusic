@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LiteMusic - Material 3 OLED & Dynamic Color (Hybrid Grid & List)</title>
+<style>
+  /*
+   * Material Design 3 (M3) Design System
+   * Optimized for Pure OLED Black (#000000) & Android Dynamic Color (Monet Engine)
+   * HYBRID LAYOUT: Both Visual Grid & Detailed List co-existing seamlessly!
+   */
+  :root {
+    --md-sys-color-primary: #52e196;
+    --md-sys-color-primary-rgb: 82, 225, 150;
+    --md-sys-color-on-primary: #00381e;
+    --md-sys-color-primary-container: #00522e;
+    --md-sys-color-on-primary-container: #77feaf;
+
+    --md-sys-color-secondary: #b6ccb9;
+    --md-sys-color-secondary-container: #374b3d;
+    --md-sys-color-on-secondary-container: #d2e8d4;
+
+    --md-sys-color-background: #000000;
+    --md-sys-color-surface: #000000;
+    --md-sys-color-surface-container-lowest: #050505;
+    --md-sys-color-surface-container-low: #0b0b0b;
+    --md-sys-color-surface-container: #121212;
+    --md-sys-color-surface-container-high: #1a1a1a;
+    --md-sys-color-surface-container-highest: #242424;
+
+    --md-sys-color-outline: #8b938a;
+    --md-sys-color-outline-variant: #414942;
+    --md-sys-color-on-surface: #e1e3de;
+    --md-sys-color-on-surface-variant: #c1c9bf;
+
+    --md-shape-corner-sm: 8px;
+    --md-shape-corner-md: 12px;
+    --md-shape-corner-lg: 16px;
+    --md-shape-corner-xl: 24px;
+    --md-shape-corner-full: 9999px;
+
+    --font-family: -apple-system, BlinkMacSystemFont, "Google Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  body[data-palette="mint"] {
+    --md-sys-color-primary: #52e196;
+    --md-sys-color-primary-rgb: 82, 225, 150;
+    --md-sys-color-on-primary: #00381e;
+    --md-sys-color-primary-container: #00522e;
+    --md-sys-color-on-primary-container: #77feaf;
+  }
+  body[data-palette="cyan"] {
+    --md-sys-color-primary: #63d3ff;
+    --md-sys-color-primary-rgb: 99, 211, 255;
+    --md-sys-color-on-primary: #003547;
+    --md-sys-color-primary-container: #004d67;
+    --md-sys-color-on-primary-container: #bde9ff;
+  }
+  body[data-palette="lavender"] {
+    --md-sys-color-primary: #d1bcff;
+    --md-sys-color-primary-rgb: 209, 188, 255;
+    --md-sys-color-on-primary: #381e72;
+    --md-sys-color-primary-container: #4f378b;
+    --md-sys-color-on-primary-container: #eaddff;
+  }
+  body[data-palette="coral"] {
+    --md-sys-color-primary: #ffb4a8;
+    --md-sys-color-primary-rgb: 255, 180, 168;
+    --md-sys-color-on-primary: #690005;
+    --md-sys-color-primary-container: #880008;
+    --md-sys-color-on-primary-container: #ffdad4;
+  }
+  body[data-palette="amber"] {
+    --md-sys-color-primary: #ffb951;
+    --md-sys-color-primary-rgb: 255, 185, 81;
+    --md-sys-color-on-primary: #452b00;
+    --md-sys-color-primary-container: #633f00;
+    --md-sys-color-on-primary-container: #ffddb3;
+  }
+  body[data-palette="mono"] {
+    --md-sys-color-primary: #e6e6e6;
+    --md-sys-color-primary-rgb: 230, 230, 230;
+    --md-sys-color-on-primary: #121212;
+    --md-sys-color-primary-container: #333333;
+    --md-sys-color-on-primary-container: #ffffff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: #060708;
+    color: var(--md-sys-color-on-surface);
+    font-family: var(--font-family);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px;
+    min-height: 100vh;
+  }
+
+  /* Monet Studio Bar */
+  .monet-studio-bar {
+    width: 100%;
+    max-width: 440px;
+    background: #101216;
+    border-radius: 20px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  }
+  .studio-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .studio-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .monet-tag {
+    background: rgba(var(--md-sys-color-primary-rgb), 0.15);
+    color: var(--md-sys-color-primary);
+    border: 1px solid rgba(var(--md-sys-color-primary-rgb), 0.3);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .palette-swatches {
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+  }
+  .swatch-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .swatch-btn.active {
+    border-color: #ffffff;
+    transform: scale(1.1);
+    box-shadow: 0 0 16px rgba(var(--md-sys-color-primary-rgb), 0.5);
+  }
+
+  /* Phone Mockup Frame */
+  .device-frame {
+    width: 100%;
+    max-width: 400px;
+    height: 820px;
+    background: var(--md-sys-color-background);
+    border-radius: 40px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.9), 0 0 0 10px #181b20;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(255,255,255,0.06);
+    transition: background-color 0.3s ease;
+  }
+
+  /* Status Bar */
+  .status-bar {
+    height: 38px;
+    padding: 0 22px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--md-sys-color-outline);
+    z-index: 10;
+  }
+  .camera-hole {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #000;
+    box-shadow: 0 0 0 2px #222;
+  }
+
+  /* M3 Top Bar */
+  .m3-top-bar {
+    padding: 2px 20px 8px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .brand-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .m3-app-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--md-shape-corner-md);
+    background: var(--md-sys-color-primary-container);
+    color: var(--md-sys-color-on-primary-container);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 16px;
+  }
+  .m3-app-title {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--md-sys-color-on-surface);
+  }
+  .m3-dsp-pill {
+    background: var(--md-sys-color-surface-container-high);
+    border: 1px solid var(--md-sys-color-outline-variant);
+    color: var(--md-sys-color-primary);
+    padding: 4px 10px;
+    border-radius: var(--md-shape-corner-full);
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+  }
+
+  /* M3 Search Bar */
+  .search-container {
+    padding: 4px 18px 6px 18px;
+  }
+  .m3-search-bar {
+    height: 46px;
+    background: var(--md-sys-color-surface-container-high);
+    border-radius: var(--md-shape-corner-full);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: 13px;
+    border: 1px solid transparent;
+  }
+  .m3-search-input {
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--md-sys-color-on-surface);
+    font-size: 13px;
+    flex: 1;
+  }
+  .m3-search-input::placeholder {
+    color: var(--md-sys-color-outline);
+  }
+
+  /* M3 Filter Chips */
+  .chips-scroll {
+    display: flex;
+    gap: 8px;
+    padding: 4px 18px 8px 18px;
+    overflow-x: auto;
+  }
+  .chips-scroll::-webkit-scrollbar { display: none; }
+  .m3-filter-chip {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: var(--md-shape-corner-sm);
+    background: var(--md-sys-color-surface-container-low);
+    border: 1px solid var(--md-sys-color-outline-variant);
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: 11.5px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+  }
+  .m3-filter-chip.active {
+    background: var(--md-sys-color-secondary-container);
+    color: var(--md-sys-color-on-secondary-container);
+    border-color: transparent;
+    font-weight: 700;
+  }
+
+  /* Main Scroll Content with BOTH GRID & LIST */
+  .content-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 18px 145px 18px;
+  }
+  .content-list::-webkit-scrollbar { display: none; }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 14px 0 10px 0;
+  }
+  .section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--md-sys-color-on-surface);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .section-link {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--md-sys-color-primary);
+    cursor: pointer;
+  }
+
+  /* ==================== 1. QUICK PICKS (2-COLUMN GRID TILES) ==================== */
+  .quick-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .quick-tile {
+    background: var(--md-sys-color-surface-container-low);
+    border-radius: var(--md-shape-corner-md);
+    padding: 6px 10px 6px 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid rgba(255,255,255,0.03);
+    cursor: pointer;
+    transition: transform 0.15s, background 0.2s;
+  }
+  .quick-tile:active {
+    transform: scale(0.97);
+    background: var(--md-sys-color-surface-container-high);
+  }
+  .quick-art {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    background: var(--md-sys-color-surface-container-highest);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .quick-text {
+    flex: 1;
+    min-width: 0;
+  }
+  .quick-title {
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .quick-sub {
+    font-size: 10.5px;
+    color: var(--md-sys-color-outline);
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ==================== 2. VISUAL GRID (HORIZONTAL SCROLLING ALBUMS / PLAYLISTS) ==================== */
+  .horizontal-grid-scroll {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-bottom: 12px;
+  }
+  .horizontal-grid-scroll::-webkit-scrollbar { display: none; }
+
+  .m3-grid-card {
+    width: 130px;
+    flex-shrink: 0;
+    background: var(--md-sys-color-surface-container-low);
+    border-radius: var(--md-shape-corner-lg);
+    padding: 8px;
+    border: 1px solid rgba(255,255,255,0.03);
+    cursor: pointer;
+    transition: transform 0.15s;
+    display: flex;
+    flex-direction: column;
+  }
+  .m3-grid-card:active {
+    transform: scale(0.96);
+  }
+  .grid-art {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: var(--md-shape-corner-md);
+    background: radial-gradient(circle at 30% 30%, var(--md-sys-color-surface-container-highest), #090909);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 38px;
+    margin-bottom: 8px;
+    position: relative;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  }
+  .grid-play-overlay {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--md-sys-color-primary);
+    color: var(--md-sys-color-on-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.6);
+  }
+  .grid-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .grid-artist {
+    font-size: 11px;
+    color: var(--md-sys-color-outline);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ==================== 3. DETAILED LIST VIEW (BẢNG XẾP HẠNG & DANH SÁCH BÀI HÁT NHƯ CŨ) ==================== */
+  .m3-song-card {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--md-sys-color-surface-container-low);
+    border-radius: var(--md-shape-corner-lg);
+    margin-bottom: 8px;
+    border: 1px solid rgba(255,255,255,0.03);
+    cursor: pointer;
+    transition: transform 0.15s, background 0.2s;
+  }
+  .m3-song-card:active {
+    transform: scale(0.98);
+    background: var(--md-sys-color-surface-container-high);
+  }
+  .card-thumbnail {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--md-shape-corner-md);
+    background: var(--md-sys-color-surface-container-highest);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    margin-right: 12px;
+    flex-shrink: 0;
+  }
+  .card-details {
+    flex: 1;
+    min-width: 0;
+  }
+  .card-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--md-sys-color-on-surface);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card-subtitle {
+    font-size: 11.5px;
+    color: var(--md-sys-color-outline);
+    margin-top: 3px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .source-badge {
+    font-size: 9px;
+    font-weight: 800;
+    padding: 1px 5px;
+    border-radius: 4px;
+    text-transform: uppercase;
+  }
+  .badge-yt { background: rgba(255, 0, 0, 0.15); color: #ff6b6b; }
+  .badge-sc { background: rgba(255, 85, 0, 0.15); color: #ff8533; }
+  .badge-sp { background: rgba(29, 185, 84, 0.15); color: #1ed760; }
+
+  /* M3 Floating Mini-Player */
+  .m3-mini-player {
+    position: absolute;
+    bottom: 84px;
+    left: 14px;
+    right: 14px;
+    height: 60px;
+    background: var(--md-sys-color-surface-container-high);
+    border-radius: var(--md-shape-corner-xl);
+    padding: 6px 14px 6px 8px;
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--md-sys-color-outline-variant);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.8);
+    cursor: pointer;
+    z-index: 20;
+    backdrop-filter: blur(12px);
+  }
+  .mini-art-m3 {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--md-shape-corner-md);
+    background: var(--md-sys-color-primary-container);
+    color: var(--md-sys-color-on-primary-container);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    margin-right: 12px;
+  }
+  .mini-meta {
+    flex: 1;
+    overflow: hidden;
+  }
+  .mini-song-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--md-sys-color-on-surface);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mini-artist-name {
+    font-size: 11px;
+    color: var(--md-sys-color-outline);
+    margin-top: 1px;
+  }
+  .mini-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .m3-fab-play {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--md-sys-color-primary);
+    color: var(--md-sys-color-on-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    border: none;
+    cursor: pointer;
+  }
+
+  /* M3 Navigation Bar */
+  .m3-navigation-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 74px;
+    background: var(--md-sys-color-surface-container-lowest);
+    border-top: 1px solid var(--md-sys-color-surface-container);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding-bottom: 6px;
+    z-index: 10;
+  }
+  .m3-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    color: var(--md-sys-color-outline);
+    font-size: 10.5px;
+    font-weight: 600;
+  }
+  .nav-pill {
+    width: 56px;
+    height: 28px;
+    border-radius: var(--md-shape-corner-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+  .m3-nav-item.active .nav-pill {
+    background: var(--md-sys-color-secondary-container);
+    color: var(--md-sys-color-on-secondary-container);
+  }
+  .m3-nav-item.active {
+    color: var(--md-sys-color-on-surface);
+    font-weight: 700;
+  }
+
+  /* Full Screen Player Modal */
+  .m3-full-player {
+    position: absolute;
+    inset: 0;
+    background: var(--md-sys-color-background);
+    z-index: 100;
+    display: none;
+    flex-direction: column;
+    padding: 24px 24px 36px 24px;
+    animation: slideSheet 0.3s cubic-bezier(0.05, 0.7, 0.1, 1.0);
+  }
+  .m3-full-player.open { display: flex; }
+  @keyframes slideSheet {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .player-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .btn-icon-m3 {
+    background: none;
+    border: none;
+    color: var(--md-sys-color-on-surface);
+    font-size: 20px;
+    cursor: pointer;
+  }
+
+  /* Album Art Container */
+  .art-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  .art-big {
+    width: 250px;
+    height: 250px;
+    border-radius: var(--md-shape-corner-xl);
+    background: radial-gradient(circle at top left, var(--md-sys-color-primary-container), #0b0b0b);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 80px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.06);
+    margin-bottom: 24px;
+  }
+  .full-song-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--md-sys-color-on-surface);
+    letter-spacing: -0.5px;
+  }
+  .full-song-artist {
+    font-size: 14px;
+    color: var(--md-sys-color-outline);
+    margin-top: 4px;
+  }
+
+  /* M3 Slider / Progress Scrubber */
+  .m3-scrubber-box {
+    width: 100%;
+    margin-top: 20px;
+  }
+  .m3-slider-track {
+    width: 100%;
+    height: 6px;
+    background: var(--md-sys-color-surface-container-highest);
+    border-radius: var(--md-shape-corner-full);
+    position: relative;
+    overflow: hidden;
+  }
+  .m3-slider-fill {
+    width: 45%;
+    height: 100%;
+    background: var(--md-sys-color-primary);
+    border-radius: var(--md-shape-corner-full);
+  }
+  .scrubber-times {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--md-sys-color-outline);
+    margin-top: 6px;
+  }
+
+  /* Playback Controls */
+  .player-control-cluster {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 8px;
+  }
+  .main-play-fab {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--md-sys-color-primary);
+    color: var(--md-sys-color-on-primary);
+    border: none;
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(var(--md-sys-color-primary-rgb), 0.35);
+  }
+
+  /* Synced Lyrics */
+  .lyrics-preview-card {
+    background: var(--md-sys-color-surface-container-low);
+    border: 1px solid var(--md-sys-color-outline-variant);
+    border-radius: var(--md-shape-corner-lg);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+  }
+  .lyrics-card-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--md-sys-color-on-surface);
+  }
+  .lyrics-line-active {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--md-sys-color-primary);
+    margin-top: 2px;
+  }
+</style>
+</head>
+<body data-palette="mint">
+
+  <!-- Monet Studio Dynamic Color Bar -->
+  <div class="monet-studio-bar">
+    <div class="studio-header">
+      <span class="studio-title">Android 12+ Monet Engine</span>
+      <span class="monet-tag" id="active-palette-name">🌿 Mint Green</span>
+    </div>
+    <div class="palette-swatches">
+      <button class="swatch-btn active" style="background:#52e196" onclick="setPalette('mint', '🌿 Mint Green (Botany)', this)" title="Mint"></button>
+      <button class="swatch-btn" style="background:#63d3ff" onclick="setPalette('cyan', '🌊 Ocean Cyan (Sky)', this)" title="Cyan"></button>
+      <button class="swatch-btn" style="background:#d1bcff" onclick="setPalette('lavender', '💜 Lavender Violet', this)" title="Lavender"></button>
+      <button class="swatch-btn" style="background:#ffb4a8" onclick="setPalette('coral', '🌸 Coral Sakura', this)" title="Coral"></button>
+      <button class="swatch-btn" style="background:#ffb951" onclick="setPalette('amber', '🍂 Amber Gold (Warm)', this)" title="Amber"></button>
+      <button class="swatch-btn" style="background:#e6e6e6; color:#000" onclick="setPalette('mono', '⚪ Pure Monochrome', this)" title="Monochrome">M</button>
+    </div>
+  </div>
+
+  <!-- Android Phone Mockup Frame -->
+  <div class="device-frame">
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <span>12:00</span>
+      <div class="camera-hole"></div>
+      <span>LTE 100%</span>
+    </div>
+
+    <!-- M3 Top Bar -->
+    <div class="m3-top-bar">
+      <div class="brand-group">
+        <div class="m3-app-icon">♫</div>
+        <div class="m3-app-title">LiteMusic</div>
+      </div>
+      <div class="m3-dsp-pill" title="Hardware Volume Normalizer (-14 LUFS)">
+        <span>⚡</span> -14 LUFS DSP
+      </div>
+    </div>
+
+    <!-- M3 Search Bar -->
+    <div class="search-container">
+      <div class="m3-search-bar">
+        <span>🔍</span>
+        <input type="text" class="m3-search-input" placeholder="Tìm bài hát, nghệ sĩ hoặc dán link..." />
+        <span>🎙️</span>
+      </div>
+    </div>
+
+    <!-- M3 Filter Chips -->
+    <div class="chips-scroll">
+      <div class="m3-filter-chip active" onclick="toggleChip(this)">
+        <span>✓</span> YouTube (Opus)
+      </div>
+      <div class="m3-filter-chip" onclick="toggleChip(this)">
+        SoundCloud
+      </div>
+      <div class="m3-filter-chip" onclick="toggleChip(this)">
+        Spotify Bridge
+      </div>
+      <div class="m3-filter-chip" onclick="toggleChip(this)">
+        Tải xuống
+      </div>
+    </div>
+
+    <!-- HYBRID CONTENT CONTAINER: CẢ GRID VÀ LIST CÙNG XUẤT HIỆN -->
+    <div class="content-list">
+
+      <!-- ==================== PHẦN 1: QUICK PICKS (GRID 2 CỘT GỌN) ==================== -->
+      <div class="section-header" style="margin-top:6px">
+        <span class="section-title">⚡ Nghe lại nhanh (Quick Grid)</span>
+        <span class="section-link">Xem thêm</span>
+      </div>
+
+      <div class="quick-grid">
+        <div class="quick-tile" onclick="openPlayer('Die With A Smile', 'Lady Gaga, Bruno Mars', '🎸')">
+          <div class="quick-art">🎸</div>
+          <div class="quick-text">
+            <div class="quick-title">Die With A Smile</div>
+            <div class="quick-sub">Lady Gaga, Bruno</div>
+          </div>
+        </div>
+
+        <div class="quick-tile" onclick="openPlayer('Espresso (Remix)', 'Sabrina Carpenter', '🎧')">
+          <div class="quick-art">🎧</div>
+          <div class="quick-text">
+            <div class="quick-title">Espresso</div>
+            <div class="quick-sub">VIP Club Remix</div>
+          </div>
+        </div>
+
+        <div class="quick-tile" onclick="openPlayer('Birds of a Feather', 'Billie Eilish', '🎵')">
+          <div class="quick-art">🎵</div>
+          <div class="quick-text">
+            <div class="quick-title">Birds of a Feather</div>
+            <div class="quick-sub">Billie Eilish</div>
+          </div>
+        </div>
+
+        <div class="quick-tile" onclick="openPlayer('Cắt Đôi Nỗi Sầu', 'Tăng Duy Tân', '🎼')">
+          <div class="quick-art">🎼</div>
+          <div class="quick-text">
+            <div class="quick-title">Cắt Đôi Nỗi Sầu</div>
+            <div class="quick-sub">Tăng Duy Tân</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== PHẦN 2: ALBUMS & PLAYLISTS (GRID VUÔNG TRỰC QUAN) ==================== -->
+      <div class="section-header">
+        <span class="section-title">🎨 Album & Playlists Nổi bật (Visual Grid)</span>
+        <span class="section-link">Tất cả</span>
+      </div>
+
+      <div class="horizontal-grid-scroll">
+        <div class="m3-grid-card" onclick="openPlayer('HIT ME HARD AND SOFT', 'Billie Eilish', '🎵')">
+          <div class="grid-art">
+            🎵
+            <div class="grid-play-overlay">▶</div>
+          </div>
+          <div class="grid-title">HIT ME HARD</div>
+          <div class="grid-artist">Billie Eilish</div>
+        </div>
+
+        <div class="m3-grid-card" onclick="openPlayer('Top Hits V-Pop 2026', 'Nhiều nghệ sĩ', '🌸')">
+          <div class="grid-art">
+            🌸
+            <div class="grid-play-overlay">▶</div>
+          </div>
+          <div class="grid-title">Top Hits V-Pop</div>
+          <div class="grid-artist">Trending Playlist</div>
+        </div>
+
+        <div class="m3-grid-card" onclick="openPlayer('Starboy Chill Mix', 'The Weeknd', '✨')">
+          <div class="grid-art">
+            ✨
+            <div class="grid-play-overlay">▶</div>
+          </div>
+          <div class="grid-title">Starboy Chill</div>
+          <div class="grid-artist">SoundCloud Radio</div>
+        </div>
+
+        <div class="m3-grid-card" onclick="openPlayer('Acoustic Coffee', 'Relaxing Beats', '☕')">
+          <div class="grid-art">
+            ☕
+            <div class="grid-play-overlay">▶</div>
+          </div>
+          <div class="grid-title">Acoustic Coffee</div>
+          <div class="grid-artist">Peaceful Vibes</div>
+        </div>
+      </div>
+
+      <!-- ==================== PHẦN 3: BẢNG XẾP HẠNG & DANH SÁCH BÀI HÁT (LIST CHI TIẾT NHƯ CŨ) ==================== -->
+      <div class="section-header">
+        <span class="section-title">📋 Bảng Xếp Hạng & Bài Hát Mới (List Detail)</span>
+        <span class="section-link">Bảng xếp hạng</span>
+      </div>
+
+      <!-- List Item 1 -->
+      <div class="m3-song-card" onclick="openPlayer('Die With A Smile', 'Lady Gaga, Bruno Mars', '🎸')">
+        <div class="card-thumbnail">🎸</div>
+        <div class="card-details">
+          <div class="card-title">Die With A Smile</div>
+          <div class="card-subtitle">
+            <span class="source-badge badge-yt">YT OPUS 160K</span>
+            <span>Lady Gaga, Bruno Mars • 04:11</span>
+          </div>
+        </div>
+        <span style="color:var(--md-sys-color-outline); font-size:16px">⋮</span>
+      </div>
+
+      <!-- List Item 2 -->
+      <div class="m3-song-card" onclick="openPlayer('Espresso (VIP Club Remix)', 'Sabrina Carpenter', '🎧')">
+        <div class="card-thumbnail">🎧</div>
+        <div class="card-details">
+          <div class="card-title">Espresso (VIP Club Remix)</div>
+          <div class="card-subtitle">
+            <span class="source-badge badge-sc">SOUNDCLOUD</span>
+            <span>DJ Beatmaker • 03:25</span>
+          </div>
+        </div>
+        <span style="color:var(--md-sys-color-outline); font-size:16px">⋮</span>
+      </div>
+
+      <!-- List Item 3 -->
+      <div class="m3-song-card" onclick="openPlayer('Birds of a Feather', 'Billie Eilish', '🎵')">
+        <div class="card-thumbnail">🎵</div>
+        <div class="card-details">
+          <div class="card-title">Birds of a Feather</div>
+          <div class="card-subtitle">
+            <span class="source-badge badge-sp">SPOTIFY SYNC</span>
+            <span>Billie Eilish • HIT ME HARD</span>
+          </div>
+        </div>
+        <span style="color:var(--md-sys-color-outline); font-size:16px">⋮</span>
+      </div>
+
+      <!-- List Item 4 -->
+      <div class="m3-song-card" onclick="openPlayer('Cắt Đôi Nỗi Sầu (Acoustic)', 'Tăng Duy Tân', '🎼')">
+        <div class="card-thumbnail">🎼</div>
+        <div class="card-details">
+          <div class="card-title">Cắt Đôi Nỗi Sầu (Acoustic)</div>
+          <div class="card-subtitle">
+            <span class="source-badge badge-yt">YT OPUS</span>
+            <span>Tăng Duy Tân • 03:02</span>
+          </div>
+        </div>
+        <span style="color:var(--md-sys-color-outline); font-size:16px">⋮</span>
+      </div>
+
+      <!-- List Item 5 -->
+      <div class="m3-song-card" onclick="openPlayer('Starboy (Slowed Reverb)', 'The Weeknd', '✨')">
+        <div class="card-thumbnail">✨</div>
+        <div class="card-details">
+          <div class="card-title">Starboy (Slowed Reverb)</div>
+          <div class="card-subtitle">
+            <span class="source-badge badge-sc">SOUNDCLOUD</span>
+            <span>Chill Night • 04:45</span>
+          </div>
+        </div>
+        <span style="color:var(--md-sys-color-outline); font-size:16px">⋮</span>
+      </div>
+    </div>
+
+    <!-- M3 Floating Mini-Player -->
+    <div class="m3-mini-player" onclick="togglePlayer(true)">
+      <div class="mini-art-m3" id="mini-art-icon">🎸</div>
+      <div class="mini-meta">
+        <div class="mini-song-name" id="mini-title-text">Die With A Smile</div>
+        <div class="mini-artist-name" id="mini-artist-text">Lady Gaga, Bruno Mars</div>
+      </div>
+      <div class="mini-actions" onclick="event.stopPropagation()">
+        <button class="btn-icon-m3" onclick="prevTrack()">⏮</button>
+        <button class="m3-fab-play" onclick="togglePlayState(this)">⏸</button>
+        <button class="btn-icon-m3" onclick="nextTrack()">⏭</button>
+      </div>
+    </div>
+
+    <!-- M3 Navigation Bar -->
+    <div class="m3-navigation-bar">
+      <div class="m3-nav-item active">
+        <div class="nav-pill">🏠</div>
+        <span>Khám phá</span>
+      </div>
+      <div class="m3-nav-item">
+        <div class="nav-pill">🔍</div>
+        <span>Tìm kiếm</span>
+      </div>
+      <div class="m3-nav-item">
+        <div class="nav-pill">📚</div>
+        <span>Thư viện</span>
+      </div>
+      <div class="m3-nav-item">
+        <div class="nav-pill">⚙️</div>
+        <span>Cài đặt</span>
+      </div>
+    </div>
+
+    <!-- M3 Full-Screen Player Modal -->
+    <div class="m3-full-player" id="fullPlayerSheet">
+      <div class="player-top-row">
+        <button class="btn-icon-m3" onclick="togglePlayer(false)">↓</button>
+        <div style="font-size:12px; font-weight:700; color:var(--md-sys-color-outline); text-transform:uppercase; letter-spacing:1px">
+          Đang phát từ YouTube Music
+        </div>
+        <button class="btn-icon-m3">⋮</button>
+      </div>
+
+      <div class="art-wrapper">
+        <div class="art-big" id="full-art-icon">🎸</div>
+        <div class="full-song-title" id="full-title-text">Die With A Smile</div>
+        <div class="full-song-artist" id="full-artist-text">Lady Gaga, Bruno Mars</div>
+
+        <div style="margin-top: 14px;">
+          <span class="m3-dsp-pill">⚡ -14.0 LUFS DSP Active</span>
+        </div>
+      </div>
+
+      <!-- Scrubber -->
+      <div class="m3-scrubber-box">
+        <div class="m3-slider-track">
+          <div class="m3-slider-fill"></div>
+        </div>
+        <div class="scrubber-times">
+          <span>01:45</span>
+          <span>04:11</span>
+        </div>
+      </div>
+
+      <!-- Controls Cluster -->
+      <div class="player-control-cluster">
+        <button class="btn-icon-m3" style="font-size:18px">🔀</button>
+        <button class="btn-icon-m3" style="font-size:24px">⏮</button>
+        <button class="main-play-fab" onclick="togglePlayState(this)">⏸</button>
+        <button class="btn-icon-m3" style="font-size:24px">⏭</button>
+        <button class="btn-icon-m3" style="font-size:18px">🔁</button>
+      </div>
+
+      <!-- Live Synced Lyrics -->
+      <div class="lyrics-preview-card" onclick="alert('Tính năng lời bài hát Karaoke (LRCLIB) đồng bộ theo thời gian thực!')">
+        <div>
+          <div class="lyrics-card-title">Lời bài hát (LRCLIB Karaoke)</div>
+          <div class="lyrics-line-active">"If the world was ending, I'd wanna be next to you..."</div>
+        </div>
+        <span style="font-size:18px">🎤</span>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function setPalette(paletteKey, name, btn) {
+      document.body.setAttribute('data-palette', paletteKey);
+      document.getElementById('active-palette-name').innerText = name;
+      document.querySelectorAll('.swatch-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+
+    function toggleChip(chip) {
+      document.querySelectorAll('.m3-filter-chip').forEach(c => {
+        c.classList.remove('active');
+        const check = c.querySelector('span');
+        if (check) check.remove();
+      });
+      chip.classList.add('active');
+      const span = document.createElement('span');
+      span.innerText = '✓ ';
+      chip.prepend(span);
+    }
+
+    function togglePlayer(show) {
+      const sheet = document.getElementById('fullPlayerSheet');
+      if (show) sheet.classList.add('open');
+      else sheet.classList.remove('open');
+    }
+
+    function openPlayer(title, artist, icon) {
+      document.getElementById('mini-title-text').innerText = title;
+      document.getElementById('mini-artist-text').innerText = artist;
+      document.getElementById('mini-art-icon').innerText = icon;
+
+      document.getElementById('full-title-text').innerText = title;
+      document.getElementById('full-artist-text').innerText = artist;
+      document.getElementById('full-art-icon').innerText = icon;
+
+      togglePlayer(true);
+    }
+
+    function togglePlayState(btn) {
+      const isPaused = (btn.innerText === '▶');
+      const newText = isPaused ? '⏸' : '▶';
+      document.querySelectorAll('.m3-fab-play, .main-play-fab').forEach(b => b.innerText = newText);
+    }
+
+    function nextTrack() {
+      openPlayer('Birds of a Feather', 'Billie Eilish', '🎵');
+    }
+    function prevTrack() {
+      openPlayer('Espresso (VIP Club Remix)', 'Sabrina Carpenter', '🎧');
+    }
+  </script>
+</body>
+</html>

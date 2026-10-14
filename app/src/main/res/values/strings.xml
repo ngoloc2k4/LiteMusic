@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">LiteMusic</string>
+    <string name="notification_channel_name">LiteMusic Playback</string>
+    <string name="notification_channel_description">LiteMusic background audio playback</string>
+</resources>

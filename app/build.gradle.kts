@@ -23,13 +23,17 @@ android {
     }
 
     signingConfigs {
-        create("devRelease") {
-            storeFile = file("${rootDir}/keystore/dev-release.jks")
-            storePassword = "litemusic123"
-            keyAlias = "litemusic"
-            keyPassword = "litemusic123"
-            enableV1Signing = true
-            enableV2Signing = true
+        create("release") {
+            val keystorePath = System.getenv("KEYSTORE_FILE") ?: "${rootDir}/release.jks"
+            val keystoreFile = file(keystorePath)
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "LiteMusicSecret2026!"
+                keyAlias = System.getenv("KEY_ALIAS") ?: "litemusic_release"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: "LiteMusicSecret2026!"
+                enableV1Signing = true
+                enableV2Signing = true
+            }
         }
     }
 
@@ -41,11 +45,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("devRelease")
+            signingConfig = signingConfigs.getByName("release")
         }
         debug {
             applicationIdSuffix = ".debug"
-            signingConfig = signingConfigs.getByName("devRelease")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

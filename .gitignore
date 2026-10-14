@@ -14,4 +14,7 @@
 .cxx
 *.apk
 *.aab
-!keystore/dev-release.jks
+*.jks
+*.keystore
+keystore/
+release.jks

@@ -280,15 +280,20 @@ fun MainAppScreen(
                         )
                     }
 
-                    AssistChip(
-                        onClick = { /* Toggle Normalizer */ },
-                        label = { Text("⚡ -14 LUFS DSP", fontSize = 10.5.sp, fontWeight = FontWeight.Bold) },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            labelColor = MaterialTheme.colorScheme.primary
-                        ),
-                        border = AssistChipDefaults.assistChipBorder(borderColor = MaterialTheme.colorScheme.outlineVariant)
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.clickable { /* Toggle Normalizer */ }
+                    ) {
+                        Text(
+                            text = "⚡ -14 LUFS DSP",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -764,10 +769,19 @@ fun M3FullScreenPlayer(
                 Text(title, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(artist, fontSize = 14.sp, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(modifier = Modifier.height(8.dp))
-                SuggestionChip(
-                    onClick = {},
-                    label = { Text("⚡ -14.0 LUFS DSP Active", fontSize = 10.sp, fontWeight = FontWeight.Bold) }
-                )
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Text(
+                        text = "⚡ -14.0 LUFS DSP Active",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
             }
 
             // Scrubber Slider

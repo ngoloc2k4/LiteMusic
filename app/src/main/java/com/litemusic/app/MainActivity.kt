@@ -3,6 +3,7 @@ package com.litemusic.app
 import android.content.ComponentName
 import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -27,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -39,6 +42,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import coil.compose.AsyncImage
 import com.google.common.util.concurrent.ListenableFuture
 import com.litemusic.app.core.audio.PlaybackService
 import com.litemusic.app.core.lyrics.LrcLibClient
@@ -49,17 +53,19 @@ import com.litemusic.app.core.resolver.SoundCloudStreamResolver
 import com.litemusic.app.core.resolver.SpotifyMetadataBridge
 import com.litemusic.app.core.resolver.YouTubeStreamResolver
 import com.litemusic.app.ui.theme.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var mediaController by mutableStateOf<MediaController?>(null)
 
-    private val ytResolver = YouTubeStreamResolver()
-    private val scResolver = SoundCloudStreamResolver()
-    private val spotifyBridge = SpotifyMetadataBridge(ytResolver)
+    val ytResolver = YouTubeStreamResolver()
+    val scResolver = SoundCloudStreamResolver()
+    val spotifyBridge = SpotifyMetadataBridge(ytResolver)
     private val lrcClient = LrcLibClient()
 
     private var activeLyrics by mutableStateOf<List<LyricLine>>(emptyList())
@@ -109,7 +115,7 @@ class MainActivity : ComponentActivity() {
                 activeLyrics = lrcClient.getLyrics(song.title, song.artist, song.durationSeconds)
             }
 
-            // Resolve streaming URL
+            // Resolve real playable stream URL from YouTube Opus / SoundCloud / Spotify Bridge
             val url = song.streamUrl ?: when (song.source) {
                 AudioSource.YOUTUBE_MUSIC -> ytResolver.resolveStreamUrl(song)
                 AudioSource.SOUNDCLOUD -> scResolver.resolveStreamUrl(song)
@@ -125,13 +131,17 @@ class MainActivity : ComponentActivity() {
                         MediaMetadata.Builder()
                             .setTitle(song.title)
                             .setArtist(song.artist)
-                            .setArtworkUri(Uri.parse(song.thumbnailUrl))
+                            .setArtworkUri(if (song.thumbnailUrl.isNotEmpty()) Uri.parse(song.thumbnailUrl) else null)
                             .build()
                     )
                     .build()
                 controller.setMediaItem(mediaItem)
                 controller.prepare()
                 controller.play()
+            } else {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "Không thể lấy luồng âm thanh cho bài này", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -157,34 +167,48 @@ fun MainAppScreen(
     var selectedSource by remember { mutableStateOf(AudioSource.YOUTUBE_MUSIC) }
     var isPlayerSheetOpen by remember { mutableStateOf(false) }
 
-    val sampleSongs = remember {
-        listOf(
-            Song("1", "Die With A Smile", "Lady Gaga, Bruno Mars", durationSeconds = 251, source = AudioSource.YOUTUBE_MUSIC),
-            Song("2", "Espresso (VIP Remix)", "Sabrina Carpenter", durationSeconds = 205, source = AudioSource.SOUNDCLOUD),
-            Song("3", "Birds of a Feather", "Billie Eilish", durationSeconds = 198, source = AudioSource.SPOTIFY),
-            Song("4", "Cắt Đôi Nỗi Sầu (Acoustic)", "Tăng Duy Tân", durationSeconds = 182, source = AudioSource.YOUTUBE_MUSIC),
-            Song("5", "Starboy (Slowed Reverb)", "The Weeknd", durationSeconds = 285, source = AudioSource.SOUNDCLOUD),
-            Song("6", "Nơi Này Có Anh", "Sơn Tùng M-TP", durationSeconds = 260, source = AudioSource.YOUTUBE_MUSIC)
-        )
-    }
+    // Live Data State
+    var homeSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var searchResults by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var isLoadingHome by remember { mutableStateOf(true) }
+    var isSearching by remember { mutableStateOf(false) }
 
-    val trendingAlbums = remember {
-        listOf(
-            "HIT ME HARD AND SOFT" to "Billie Eilish",
-            "Top Hits V-Pop 2026" to "Trending Playlist",
-            "Starboy Chill Radio" to "SoundCloud Mix",
-            "Acoustic Coffee" to "Peaceful Vibes"
-        )
-    }
-
+    // Playback state
     var isPlaying by remember { mutableStateOf(false) }
-    var currentTitle by remember { mutableStateOf("Die With A Smile") }
-    var currentArtist by remember { mutableStateOf("Lady Gaga, Bruno Mars") }
+    var currentTitle by remember { mutableStateOf("") }
+    var currentArtist by remember { mutableStateOf("") }
+    var currentArtwork by remember { mutableStateOf("") }
     var currentPositionMs by remember { mutableLongStateOf(0L) }
-    var durationMs by remember { mutableLongStateOf(251000L) }
+    var durationMs by remember { mutableLongStateOf(0L) }
     var selectedNavTab by remember { mutableStateOf(0) }
 
-    // MediaController state sync
+    // Fetch initial live trending music on app start
+    LaunchedEffect(Unit) {
+        isLoadingHome = true
+        val trending = onSearch("Top thịnh hành Việt Nam", AudioSource.YOUTUBE_MUSIC)
+        homeSongs = trending
+        if (trending.isNotEmpty()) {
+            currentTitle = trending.first().title
+            currentArtist = trending.first().artist
+            currentArtwork = trending.first().thumbnailUrl
+        }
+        isLoadingHome = false
+    }
+
+    // Debounced search when user types
+    LaunchedEffect(searchQuery, selectedSource) {
+        val q = searchQuery.trim()
+        if (q.isNotEmpty()) {
+            delay(400) // Debounce
+            isSearching = true
+            searchResults = onSearch(q, selectedSource)
+            isSearching = false
+        } else {
+            searchResults = emptyList()
+        }
+    }
+
+    // MediaController state listener
     DisposableEffect(mediaController) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
@@ -194,6 +218,7 @@ fun MainAppScreen(
                 mediaItem?.mediaMetadata?.let {
                     currentTitle = it.title?.toString() ?: ""
                     currentArtist = it.artist?.toString() ?: ""
+                    currentArtwork = it.artworkUri?.toString() ?: ""
                 }
             }
         }
@@ -201,7 +226,7 @@ fun MainAppScreen(
         onDispose { mediaController?.removeListener(listener) }
     }
 
-    // Ticker coroutine to update progress smooth scrubber
+    // Progress Ticker
     LaunchedEffect(isPlaying) {
         while (isPlaying) {
             mediaController?.let {
@@ -283,8 +308,7 @@ fun MainAppScreen(
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        modifier = Modifier.clickable { /* Toggle Normalizer */ }
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
                         Text(
                             text = "⚡ -14 LUFS DSP",
@@ -306,8 +330,12 @@ fun MainAppScreen(
                     placeholder = { Text("Tìm bài hát, ca sĩ, link...", fontSize = 13.sp) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.outline) },
                     trailingIcon = {
-                        if (isResolving) {
+                        if (isSearching || isResolving) {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+                        } else if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = MaterialTheme.colorScheme.outline)
+                            }
                         }
                     },
                     singleLine = true,
@@ -355,119 +383,149 @@ fun MainAppScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // HYBRID CONTENT FEED: CẢ GRID VÀ LIST CÙNG XUẤT HIỆN
+                // Active List (Search Results or Home Feed)
                 Box(modifier = Modifier.weight(1f)) {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
-                        contentPadding = PaddingValues(bottom = 90.dp)
-                    ) {
-                        // Section 1: Quick Grid (2 Cột)
-                        item {
-                            Text(
-                                text = "⚡ Nghe lại nhanh (Quick Grid)",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
+                    if (searchQuery.isNotEmpty()) {
+                        // Display Search Results
+                        if (isSearching) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(bottom = 90.dp)
+                            ) {
+                                item {
+                                    Text(
+                                        text = "Kết quả tìm kiếm (${searchResults.size})",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                                items(searchResults) { song ->
+                                    SongListCard(song = song, onClick = {
+                                        currentTitle = song.title
+                                        currentArtist = song.artist
+                                        currentArtwork = song.thumbnailUrl
+                                        onPlaySong(song)
+                                    })
+                                }
+                            }
+                        }
+                    } else {
+                        // Hybrid Home Screen
+                        if (isLoadingHome) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text("Đang tải dữ liệu thực từ YouTube Music...", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                                contentPadding = PaddingValues(bottom = 90.dp)
+                            ) {
+                                // Section 1: Quick Picks Grid
+                                item {
+                                    Text(
+                                        text = "⚡ Nghe nhanh (Quick Grid)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
 
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                val chunked = sampleSongs.take(4).chunked(2)
-                                chunked.forEach { pair ->
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        pair.forEach { song ->
-                                            Box(modifier = Modifier.weight(1f)) {
-                                                QuickPickTile(song = song, onClick = {
-                                                    currentTitle = song.title
-                                                    currentArtist = song.artist
-                                                    isPlayerSheetOpen = true
-                                                    onPlaySong(song)
-                                                })
+                                    val quickList = homeSongs.take(4)
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        quickList.chunked(2).forEach { pair ->
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                pair.forEach { song ->
+                                                    Box(modifier = Modifier.weight(1f)) {
+                                                        QuickPickTile(song = song, onClick = {
+                                                            currentTitle = song.title
+                                                            currentArtist = song.artist
+                                                            currentArtwork = song.thumbnailUrl
+                                                            onPlaySong(song)
+                                                        })
+                                                    }
+                                                }
+                                                if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
                                             }
-                                        }
-                                        if (pair.size == 1) {
-                                            Spacer(modifier = Modifier.weight(1f))
                                         }
                                     }
                                 }
-                            }
-                        }
 
-                        // Section 2: Visual Grid (Album Cards)
-                        item {
-                            Text(
-                                text = "🎨 Album & Playlists Nổi bật (Visual Grid)",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
+                                // Section 2: Visual Album Grid (Horizontal Carousel)
+                                item {
+                                    Text(
+                                        text = "🎨 Đề xuất trực quan (Visual Grid)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
 
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                items(trendingAlbums) { (title, subtitle) ->
-                                    AlbumGridCard(
-                                        title = title,
-                                        subtitle = subtitle,
-                                        onClick = {
-                                            currentTitle = title
-                                            currentArtist = subtitle
-                                            isPlayerSheetOpen = true
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        items(homeSongs.drop(4).take(8)) { song ->
+                                            AlbumGridCard(
+                                                song = song,
+                                                onClick = {
+                                                    currentTitle = song.title
+                                                    currentArtist = song.artist
+                                                    currentArtwork = song.thumbnailUrl
+                                                    onPlaySong(song)
+                                                }
+                                            )
                                         }
+                                    }
+                                }
+
+                                // Section 3: Detailed Track List
+                                item {
+                                    Text(
+                                        text = "📋 Bảng xếp hạng thịnh hành (List Detail)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
-                            }
-                        }
 
-                        // Section 3: Detailed List Rows như cũ
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "📋 Bảng Xếp Hạng & Bài Hát (List Detail)",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Tất cả",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        items(sampleSongs) { song ->
-                            SongListCard(
-                                song = song,
-                                onClick = {
-                                    currentTitle = song.title
-                                    currentArtist = song.artist
-                                    isPlayerSheetOpen = true
-                                    onPlaySong(song)
+                                items(homeSongs.drop(12)) { song ->
+                                    SongListCard(song = song, onClick = {
+                                        currentTitle = song.title
+                                        currentArtist = song.artist
+                                        currentArtwork = song.thumbnailUrl
+                                        onPlaySong(song)
+                                    })
                                 }
-                            )
+                            }
                         }
                     }
 
-                    // Floating MiniPlayer
-                    Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)) {
-                        M3MiniPlayer(
-                            title = currentTitle,
-                            artist = currentArtist,
-                            isPlaying = isPlaying,
-                            onPlayPause = {
-                                mediaController?.let {
-                                    if (it.isPlaying) it.pause() else it.play()
-                                } ?: run { isPlaying = !isPlaying }
-                            },
-                            onNext = { mediaController?.seekToNextMediaItem() },
-                            onClick = { isPlayerSheetOpen = true }
-                        )
+                    // Floating MiniPlayer (Only show if a song has been selected)
+                    if (currentTitle.isNotEmpty()) {
+                        Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)) {
+                            M3MiniPlayer(
+                                title = currentTitle,
+                                artist = currentArtist,
+                                artworkUrl = currentArtwork,
+                                isPlaying = isPlaying,
+                                isResolving = isResolving,
+                                onPlayPause = {
+                                    mediaController?.let {
+                                        if (it.isPlaying) it.pause() else it.play()
+                                    }
+                                },
+                                onNext = { mediaController?.seekToNextMediaItem() },
+                                onClick = { isPlayerSheetOpen = true }
+                            )
+                        }
                     }
                 }
             }
@@ -482,6 +540,7 @@ fun MainAppScreen(
             M3FullScreenPlayer(
                 title = currentTitle,
                 artist = currentArtist,
+                artworkUrl = currentArtwork,
                 isPlaying = isPlaying,
                 currentPositionMs = currentPositionMs,
                 durationMs = durationMs,
@@ -490,7 +549,7 @@ fun MainAppScreen(
                 onPlayPause = {
                     mediaController?.let {
                         if (it.isPlaying) it.pause() else it.play()
-                    } ?: run { isPlaying = !isPlaying }
+                    }
                 },
                 onSeek = onSeek
             )
@@ -513,14 +572,18 @@ fun QuickPickTile(song: Song, onClick: () -> Unit) {
             modifier = Modifier.padding(6.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("🎵", fontSize = 18.sp)
+            if (song.thumbnailUrl.isNotEmpty()) {
+                AsyncImage(
+                    model = song.thumbnailUrl,
+                    contentDescription = song.title,
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                    contentAlignment = Alignment.Center
+                ) { Text("🎵", fontSize = 18.sp) }
             }
             Spacer(modifier = Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -532,7 +595,7 @@ fun QuickPickTile(song: Song, onClick: () -> Unit) {
 }
 
 @Composable
-fun AlbumGridCard(title: String, subtitle: String, onClick: () -> Unit) {
+fun AlbumGridCard(song: Song, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .width(132.dp)
@@ -550,7 +613,16 @@ fun AlbumGridCard(title: String, subtitle: String, onClick: () -> Unit) {
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center
             ) {
-                Text("🎨", fontSize = 36.sp)
+                if (song.thumbnailUrl.isNotEmpty()) {
+                    AsyncImage(
+                        model = song.thumbnailUrl,
+                        contentDescription = song.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Text("🎨", fontSize = 36.sp)
+                }
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -564,8 +636,8 @@ fun AlbumGridCard(title: String, subtitle: String, onClick: () -> Unit) {
                 }
             }
             Spacer(modifier = Modifier.height(6.dp))
-            Text(title, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(song.title, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(song.artist, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -584,11 +656,18 @@ fun SongListCard(song: Song, onClick: () -> Unit) {
             modifier = Modifier.padding(10.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("♫", fontSize = 20.sp)
+            if (song.thumbnailUrl.isNotEmpty()) {
+                AsyncImage(
+                    model = song.thumbnailUrl,
+                    contentDescription = song.title,
+                    modifier = Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                    contentAlignment = Alignment.Center
+                ) { Text("♫", fontSize = 20.sp) }
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -613,7 +692,9 @@ fun SongListCard(song: Song, onClick: () -> Unit) {
 fun M3MiniPlayer(
     title: String,
     artist: String,
+    artworkUrl: String,
     isPlaying: Boolean,
+    isResolving: Boolean,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onClick: () -> Unit
@@ -632,19 +713,30 @@ fun M3MiniPlayer(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("▶", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+            if (artworkUrl.isNotEmpty()) {
+                AsyncImage(
+                    model = artworkUrl,
+                    contentDescription = title,
+                    modifier = Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) { Text("▶", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold) }
             }
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(artist, fontSize = 11.sp, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            IconButton(onClick = onPlayPause) {
-                Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = MaterialTheme.colorScheme.primary)
+            if (isResolving) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+            } else {
+                IconButton(onClick = onPlayPause) {
+                    Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = MaterialTheme.colorScheme.primary)
+                }
             }
             IconButton(onClick = onNext) {
                 Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = MaterialTheme.colorScheme.onSurface)
@@ -657,6 +749,7 @@ fun M3MiniPlayer(
 fun M3FullScreenPlayer(
     title: String,
     artist: String,
+    artworkUrl: String,
     isPlaying: Boolean,
     currentPositionMs: Long,
     durationMs: Long,
@@ -670,7 +763,6 @@ fun M3FullScreenPlayer(
 
     val progress = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
 
-    // Find active lyric line index
     val activeLyricIndex = remember(currentPositionMs, lyrics) {
         val idx = lyrics.indexOfLast { it.timestampMs <= currentPositionMs }
         if (idx >= 0) idx else 0
@@ -750,14 +842,23 @@ fun M3FullScreenPlayer(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(260.dp)
-                                    .clip(RoundedCornerShape(28.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("🎸", fontSize = 80.sp)
+                            if (artworkUrl.isNotEmpty()) {
+                                AsyncImage(
+                                    model = artworkUrl,
+                                    contentDescription = title,
+                                    modifier = Modifier
+                                        .size(260.dp)
+                                        .clip(RoundedCornerShape(28.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(260.dp)
+                                        .clip(RoundedCornerShape(28.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                                    contentAlignment = Alignment.Center
+                                ) { Text("🎸", fontSize = 80.sp) }
                             }
                         }
                     }

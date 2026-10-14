@@ -22,22 +22,24 @@ class YouTubeStreamResolver(
     private val tag = "YTStreamResolver"
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-    // InnerTube Web Client configuration for YouTube Music
     private val innerTubeUrl = "https://music.youtube.com/youtubei/v1"
     private val playerUrl = "https://www.youtube.com/youtubei/v1/player"
+
+    suspend fun getTrending(): List<Song> {
+        return search("Top thịnh hành Việt Nam")
+    }
 
     override suspend fun search(query: String): List<Song> = withContext(Dispatchers.IO) {
         val results = mutableListOf<Song>()
         try {
             val payload = JSONObject().apply {
-                put("context", getInnerTubeContext())
+                put("context", getWebRemixContext())
                 put("query", query)
-                put("params", "Eg-KAQwIABAAGAAgACgAMABqChAEEAMQCRAFEAo%3D") // Music songs filter
             }
 
             val request = Request.Builder()
                 .url("$innerTubeUrl/search")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .header("Referer", "https://music.youtube.com/")
                 .post(payload.toString().toRequestBody(jsonMediaType))
                 .build()
@@ -46,57 +48,28 @@ class YouTubeStreamResolver(
             val body = response.body?.string() ?: return@withContext emptyList()
             val json = JSONObject(body)
 
-            // Parse search contents
-            val sectionList = json.optJSONObject("contents")
+            val tabs = json.optJSONObject("contents")
                 ?.optJSONObject("tabbedSearchResultsRenderer")
-                ?.optJSONArray("tabs")?.optJSONObject(0)
+                ?.optJSONArray("tabs") ?: return@withContext emptyList()
+
+            val sections = tabs.optJSONObject(0)
                 ?.optJSONObject("tabRenderer")
                 ?.optJSONObject("content")
                 ?.optJSONObject("sectionListRenderer")
-                ?.optJSONArray("contents")
+                ?.optJSONArray("contents") ?: return@withContext emptyList()
 
-            if (sectionList != null) {
-                for (i in 0 until sectionList.length()) {
-                    val shelf = sectionList.optJSONObject(i)?.optJSONObject("musicShelfRenderer")
-                    val items = shelf?.optJSONArray("contents") ?: continue
-                    for (j in 0 until items.length()) {
-                        val item = items.optJSONObject(j)?.optJSONObject("musicResponsiveListItemRenderer") ?: continue
-                        val flexColumns = item.optJSONArray("flexColumns") ?: continue
+            for (i in 0 until sections.length()) {
+                val sectionObj = sections.optJSONObject(i) ?: continue
 
-                        // Extract Title
-                        val titleRuns = flexColumns.optJSONObject(0)
-                            ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
-                            ?.optJSONObject("text")?.optJSONArray("runs")
-                        val title = titleRuns?.optJSONObject(0)?.optString("text") ?: "Unknown"
+                // Check itemSectionRenderer
+                val itemSection = sectionObj.optJSONObject("itemSectionRenderer")
+                val shelfContents = itemSection?.optJSONArray("contents")
+                    ?: sectionObj.optJSONObject("musicShelfRenderer")?.optJSONArray("contents")
 
-                        // Extract Artist & Duration
-                        val subtitleRuns = flexColumns.optJSONObject(1)
-                            ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
-                            ?.optJSONObject("text")?.optJSONArray("runs")
-                        val artist = subtitleRuns?.optJSONObject(0)?.optString("text") ?: "Unknown Artist"
-
-                        // Extract Video/Audio ID
-                        val videoId = item.optJSONObject("playlistItemData")?.optString("videoId")
-                            ?: item.optJSONObject("doubleTapCommand")
-                                ?.optJSONObject("watchEndpoint")?.optString("videoId")
-                            ?: continue
-
-                        // Extract Thumbnail
-                        val thumbnails = item.optJSONObject("thumbnail")
-                            ?.optJSONObject("musicThumbnailRenderer")
-                            ?.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
-                        val thumbUrl = thumbnails?.optJSONObject(thumbnails.length() - 1)?.optString("url") ?: ""
-
-                        results.add(
-                            Song(
-                                id = videoId,
-                                title = title,
-                                artist = artist,
-                                thumbnailUrl = thumbUrl,
-                                source = AudioSource.YOUTUBE_MUSIC,
-                                sourceId = videoId
-                            )
-                        )
+                if (shelfContents != null) {
+                    for (j in 0 until shelfContents.length()) {
+                        val item = shelfContents.optJSONObject(j)?.optJSONObject("musicResponsiveListItemRenderer") ?: continue
+                        parseResponsiveItem(item)?.let { results.add(it) }
                     }
                 }
             }
@@ -106,29 +79,132 @@ class YouTubeStreamResolver(
         results
     }
 
+    private fun parseResponsiveItem(item: JSONObject): Song? {
+        val flexColumns = item.optJSONArray("flexColumns") ?: return null
+
+        // Extract Title
+        val title = flexColumns.optJSONObject(0)
+            ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+            ?.optJSONObject("text")?.optJSONArray("runs")
+            ?.optJSONObject(0)?.optString("text") ?: return null
+
+        // Extract Artist
+        val artistRuns = flexColumns.optJSONObject(1)
+            ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+            ?.optJSONObject("text")?.optJSONArray("runs")
+        val artist = artistRuns?.optJSONObject(0)?.optString("text") ?: "YouTube Music"
+
+        // Extract VideoId
+        val overlayWatch = item.optJSONObject("overlay")
+            ?.optJSONObject("musicItemThumbnailOverlayRenderer")
+            ?.optJSONObject("content")
+            ?.optJSONObject("musicPlayButtonRenderer")
+            ?.optJSONObject("playNavigationEndpoint")
+            ?.optJSONObject("watchEndpoint")
+            ?.optString("videoId")
+
+        val navWatch = item.optJSONObject("navigationEndpoint")
+            ?.optJSONObject("watchEndpoint")
+            ?.optString("videoId")
+
+        val videoId = overlayWatch ?: navWatch ?: return null
+
+        // Extract High-Res Thumbnail
+        val thumbs = item.optJSONObject("thumbnail")
+            ?.optJSONObject("musicThumbnailRenderer")
+            ?.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
+        val thumbUrl = if (thumbs != null && thumbs.length() > 0) {
+            thumbs.optJSONObject(thumbs.length() - 1)?.optString("url") ?: ""
+        } else {
+            "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+        }
+
+        return Song(
+            id = videoId,
+            title = title,
+            artist = artist,
+            thumbnailUrl = thumbUrl,
+            source = AudioSource.YOUTUBE_MUSIC,
+            sourceId = videoId
+        )
+    }
+
+    private var cachedVisitorData: String? = null
+    private var cachedSts: Int = 20300
+
+    private fun refreshVisitorData(videoId: String) {
+        try {
+            val req = Request.Builder()
+                .url("https://www.youtube.com/watch?v=$videoId")
+                .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15")
+                .build()
+            val resp = client.newCall(req).execute()
+            val html = resp.body?.string() ?: return
+            val visMatch = Regex("\"VISITOR_DATA\":\"([^\"]+)\"").find(html)
+            val stsMatch = Regex("\"signatureTimestamp\":(\\d+)").find(html)
+            visMatch?.groupValues?.get(1)?.let { cachedVisitorData = it }
+            stsMatch?.groupValues?.get(1)?.toIntOrNull()?.let { cachedSts = it }
+        } catch (e: Exception) {
+            Log.w(tag, "Failed to refresh visitor data", e)
+        }
+    }
+
     override suspend fun resolveStreamUrl(song: Song): String? = withContext(Dispatchers.IO) {
         val videoId = song.sourceId
+        
+        // 1. Try VISIONOS InnerTube client (Proven unthrottled direct streams)
+        val visionUrl = resolveViaVisionOs(videoId)
+        if (visionUrl != null) return@withContext visionUrl
+
+        // 2. Fallback to Invidious API
+        val invidiousUrl = resolveViaInvidious(videoId)
+        if (invidiousUrl != null) return@withContext invidiousUrl
+
+        Log.e(tag, "All stream resolution attempts failed for ${song.title} ($videoId)")
+        null
+    }
+
+    private fun resolveViaVisionOs(videoId: String): String? {
         try {
-            // Request direct streaming format via InnerTube Android Client (bypasses cipher signatures)
-            val payload = JSONObject().apply {
-                put("context", getAndroidContext())
-                put("videoId", videoId)
+            if (cachedVisitorData == null) {
+                refreshVisitorData(videoId)
             }
 
-            val request = Request.Builder()
-                .url(playerUrl)
-                .header("User-Agent", "com.google.android.youtube/19.29.35 (Linux; U; Android 14)")
-                .post(payload.toString().toRequestBody(jsonMediaType))
-                .build()
+            val payload = JSONObject().apply {
+                put("context", getVisionOsContext(cachedVisitorData))
+                put("videoId", videoId)
+                put("playbackContext", JSONObject().apply {
+                    put("contentPlaybackContext", JSONObject().apply {
+                        put("html5Preference", "HTML5_PREF_WANTS")
+                        put("signatureTimestamp", cachedSts)
+                    })
+                })
+            }
 
-            val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: return@withContext null
+            val reqBuilder = Request.Builder()
+                .url("$playerUrl?prettyPrint=false")
+                .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15")
+                .header("Content-Type", "application/json")
+                .header("X-Youtube-Client-Name", "101")
+                .header("X-Youtube-Client-Version", "1.02")
+                .header("Origin", "https://www.youtube.com")
+                .post(payload.toString().toRequestBody(jsonMediaType))
+
+            cachedVisitorData?.let { reqBuilder.header("X-Goog-Visitor-Id", it) }
+
+            val response = client.newCall(reqBuilder.build()).execute()
+            val body = response.body?.string() ?: return null
             val json = JSONObject(body)
 
-            val streamingData = json.optJSONObject("streamingData") ?: return@withContext null
-            val adaptiveFormats = streamingData.optJSONArray("adaptiveFormats") ?: return@withContext null
+            val status = json.optJSONObject("playabilityStatus")?.optString("status")
+            if (status != "OK") {
+                Log.w(tag, "VISIONOS playabilityStatus for $videoId: $status. Retrying with fresh visitor data.")
+                refreshVisitorData(videoId)
+            }
 
-            // Prioritize Opus audio format (approx 160kbps, mimeType audio/webm)
+            val streamingData = json.optJSONObject("streamingData") ?: return null
+            val adaptiveFormats = streamingData.optJSONArray("adaptiveFormats") ?: return null
+
             var chosenUrl: String? = null
             var highestBitrate = 0
 
@@ -144,15 +220,41 @@ class YouTubeStreamResolver(
                     }
                 }
             }
-
-            return@withContext chosenUrl
+            return chosenUrl
         } catch (e: Exception) {
-            Log.e(tag, "Failed to resolve stream for ${song.title} ($videoId)", e)
-            null
+            Log.w(tag, "VISIONOS resolution error for $videoId", e)
+            return null
         }
     }
 
-    private fun getInnerTubeContext(): JSONObject {
+    private fun resolveViaInvidious(videoId: String): String? {
+        val instances = listOf("https://invidious.f5.si", "https://inv.vern.cc")
+        for (instance in instances) {
+            try {
+                val request = Request.Builder()
+                    .url("$instance/api/v1/videos/$videoId")
+                    .header("User-Agent", "Mozilla/5.0")
+                    .build()
+                val response = client.newCall(request).execute()
+                val body = response.body?.string() ?: continue
+                val json = JSONObject(body)
+                val formats = json.optJSONArray("adaptiveFormats") ?: continue
+                for (i in 0 until formats.length()) {
+                    val format = formats.optJSONObject(i) ?: continue
+                    val type = format.optString("type")
+                    if (type.contains("audio/")) {
+                        val url = format.optString("url")
+                        if (url.isNotEmpty()) return url
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(tag, "Invidious instance $instance failed: ${e.message}")
+            }
+        }
+        return null
+    }
+
+    private fun getWebRemixContext(): JSONObject {
         return JSONObject().apply {
             put("client", JSONObject().apply {
                 put("clientName", "WEB_REMIX")
@@ -163,14 +265,22 @@ class YouTubeStreamResolver(
         }
     }
 
-    private fun getAndroidContext(): JSONObject {
+    private fun getVisionOsContext(visitorData: String?): JSONObject {
         return JSONObject().apply {
             put("client", JSONObject().apply {
-                put("clientName", "ANDROID")
-                put("clientVersion", "19.29.35")
-                put("androidSdkVersion", 34)
-                put("hl", "vi")
-                put("gl", "VN")
+                put("clientName", "VISIONOS")
+                put("clientVersion", "1.02")
+                put("deviceMake", "Apple")
+                put("deviceModel", "RealityDevice17,1")
+                put("osName", "visionOS")
+                put("osVersion", "26.5.23O471")
+                put("userAgent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15")
+                put("hl", "en")
+                put("timeZone", "UTC")
+                put("utcOffsetMinutes", 0)
+                if (!visitorData.isNullOrEmpty()) {
+                    put("visitorData", visitorData)
+                }
             })
         }
     }

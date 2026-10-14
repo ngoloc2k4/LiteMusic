@@ -19,8 +19,12 @@ class SoundCloudStreamResolver(
 ) : StreamResolver {
 
     private val tag = "SoundCloudResolver"
-    // Public mobile web client ID
-    private var clientId = "2t9loNfh0ekOfbnFeO3wEiHGMIWqDUud"
+    // Valid public SoundCloud web client ID
+    private var clientId = "kR7dAfT5UXQgmgde1pLjfsRGiaoANLvT"
+
+    suspend fun getTrending(): List<Song> {
+        return search("Top Trending Vietnam")
+    }
 
     override suspend fun search(query: String): List<Song> = withContext(Dispatchers.IO) {
         val results = mutableListOf<Song>()
@@ -30,7 +34,7 @@ class SoundCloudStreamResolver(
 
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "Mozilla/5.0 (Android; Mobile)")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .build()
 
             val response = client.newCall(request).execute()
@@ -44,7 +48,8 @@ class SoundCloudStreamResolver(
                 val title = item.optString("title", "Unknown")
                 val user = item.optJSONObject("user")
                 val artist = user?.optString("username", "SoundCloud Artist") ?: "SoundCloud Artist"
-                val artworkUrl = item.optString("artwork_url", "").replace("-large", "-t500x500")
+                val artworkUrl = item.optString("artwork_url", "")
+                    .replace("-large", "-t500x500")
                 val duration = item.optLong("duration", 0L) / 1000
 
                 // Get progressive or hls streaming url from media.transcodings
@@ -89,7 +94,7 @@ class SoundCloudStreamResolver(
             val url = "$streamApiUrl?client_id=$clientId"
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "Mozilla/5.0 (Android; Mobile)")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
                 .build()
 
             val response = client.newCall(request).execute()

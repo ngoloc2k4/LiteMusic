@@ -150,18 +150,33 @@ fun SearchScreen(
                         )
                     }
 
-                    // Bottom AI Search Tile
-                    item {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        AiSearchTile(
-                            query = searchQuery,
-                            onClick = onAiSearchClick
-                        )
+                    // Bottom AI Search Tile - only shown for playlists, vibes, or compilations (not for single song/artist search)
+                    if (isVibeOrPlaylistQuery(searchQuery)) {
+                        item {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            AiSearchTile(
+                                query = searchQuery,
+                                onClick = onAiSearchClick
+                            )
+                        }
                     }
                 }
             }
         }
     }
+}
+
+private fun isVibeOrPlaylistQuery(query: String): Boolean {
+    val q = query.trim().lowercase()
+    val vibeKeywords = listOf(
+        "list", "lofi", "chill", "tết", "mưa", "playlist", "tuyển chọn", 
+        "tập hợp", "liên khúc", "vibe", "mood", "relax", "thư giãn", 
+        "ngủ ngon", "buổi sáng", "đêm", "coffee", "quán cà phê", "học bài", 
+        "study", "gym", "workout", "remix", "acoustic", "nhẹ nhàng", "buồn",
+        "tâm trạng", "sôi động", "nhạc xuân", "giáng sinh", "summer", "mùa hè", "đám cưới",
+        "nhạc trẻ", "nhạc đỏ", "nhạc vàng", "bolero", "top", "bảng xếp hạng"
+    )
+    return vibeKeywords.any { q.contains(it) }
 }
 
 @Composable

@@ -68,7 +68,7 @@ class AudioEffectManager {
      * 101%..250%: Sets player software volume to 1.0f, and boosts hardware DSP gain via LoudnessEnhancer up to +12 dB.
      */
     fun setCustomVolume(percent: Int, setPlayerVolume: (Float) -> Unit) {
-        val clamped = percent.coerceIn(0, 250)
+        val clamped = percent.coerceIn(0, 300)
         volumePercent = clamped
 
         if (clamped <= 100) {
@@ -93,9 +93,9 @@ class AudioEffectManager {
 
         var boostGainMb = 0
         if (volumePercent > 100) {
-            // Scale excess volume (101..250%) to 0..1200 mB (+12 dB DSP Boost)
-            val excessRatio = (volumePercent - 100) / 150f
-            boostGainMb = (excessRatio * 1200f).roundToInt()
+            // Scale excess volume (101..300%) to 0..1500 mB (+15 dB DSP Boost)
+            val excessRatio = (volumePercent - 100) / 200f
+            boostGainMb = (excessRatio * 1500f).roundToInt()
         }
 
         val totalGainMb = normalizerGainMb + boostGainMb

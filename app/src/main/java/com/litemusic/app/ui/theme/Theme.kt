@@ -81,13 +81,13 @@ fun LiteMusicTheme(
         themeStyle == AppThemeStyle.LIQUID_GLASS -> {
             if (isDark) {
                 baseScheme.copy(
-                    background = Color(0xFF090D14),
+                    background = Color(0xFF070B12),
                     surface = GlassSurfaceDark,
-                    surfaceContainerLowest = Color(0x1F1A2230),
-                    surfaceContainerLow = Color(0x2E1E2636),
+                    surfaceContainerLowest = Color(0x1F131C2D),
+                    surfaceContainerLow = Color(0x33172236),
                     surfaceContainer = GlassSurfaceDark,
-                    surfaceContainerHigh = Color(0x40323E52),
-                    surfaceContainerHighest = Color(0x52415068)
+                    surfaceContainerHigh = Color(0x4D202E46),
+                    surfaceContainerHighest = Color(0x66293B58)
                 )
             } else {
                 baseScheme.copy(

@@ -622,12 +622,13 @@ fun MainAppScreen(
 
     val bgModifier = if (isGlass) {
         Modifier.fillMaxSize().background(
-            Brush.verticalGradient(
-                listOf(
-                    MaterialTheme.colorScheme.background,
-                    MaterialTheme.colorScheme.background.copy(alpha = 0.94f),
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                )
+            Brush.radialGradient(
+                colors = listOf(
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.10f),
+                    Color(0xFF070B12)
+                ),
+                radius = 1600f
             )
         )
     } else {
@@ -1057,6 +1058,40 @@ fun MainAppScreen(
                 onClearQueue = {
                     songQueue = emptyList()
                     Toast.makeText(context, "Đã xóa toàn bộ danh sách chờ", Toast.LENGTH_SHORT).show()
+                },
+                onRefreshQueue = {
+                    val base = activeSong ?: currentSong
+                    if (base != null) {
+                        coroutineScope.launch {
+                            val candidatePool = (homeSongs + searchResults + libraryManager.getFavorites() + libraryManager.getRecentlyPlayed()).distinctBy { it.id }
+                            val newSongs = LocalHeuristicRanker.recommendRelatedSongs(
+                                baseSong = base,
+                                candidatePool = candidatePool,
+                                targetCount = 20,
+                                historySongs = libraryManager.getRecentlyPlayed()
+                            )
+                            val filtered = libraryManager.filterBlocked(newSongs).filterNot { it.id == base.id }
+                            if (filtered.isNotEmpty()) {
+                                songQueue = filtered
+                                Toast.makeText(context, "Đã làm mới danh sách chờ (+${filtered.size} bài)", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Đang tải thêm danh sách đề xuất...", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                },
+                onRecommendQueueAi = {
+                    val cur = activeSong ?: currentSong
+                    val prompt = if (cur != null) "Tạo playlist phong cách và giai điệu tương tự '${cur.title}' của ${cur.artist}" else "Playlist tuyển chọn thịnh hành"
+                    showAiDialog = true
+                    coroutineScope.launch {
+                        aiGenerator.generatePlaylist(
+                            userPrompt = prompt,
+                            targetSongCount = 20
+                        ) { state ->
+                            aiGenerationState = state
+                        }
+                    }
                 },
                 onSkipNext = { playNextInQueue() },
                 onSkipPrevious = { playPreviousInQueue() },
@@ -1655,6 +1690,8 @@ fun M3FullScreenPlayer(
     onPlayQueueSong: (Song) -> Unit = {},
     onRemoveFromQueue: (Int) -> Unit = {},
     onClearQueue: () -> Unit = {},
+    onRefreshQueue: () -> Unit = {},
+    onRecommendQueueAi: () -> Unit = {},
     onSkipNext: () -> Unit = {},
     onSkipPrevious: () -> Unit = {},
     isLoading: Boolean = false,
@@ -2014,14 +2051,44 @@ fun M3FullScreenPlayer(
                                     color = MaterialTheme.colorScheme.outline,
                                     letterSpacing = 1.sp
                                 )
-                                if (songQueue.isNotEmpty()) {
-                                    TextButton(
-                                        onClick = onClearQueue,
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Refresh recommendations button
+                                    FilledTonalButton(
+                                        onClick = onRefreshQueue,
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Xóa tất cả", fontSize = 11.sp, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("Làm mới", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    // Recommend with AI button
+                                    FilledTonalButton(
+                                        onClick = onRecommendQueueAi,
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.filledTonalButtonColors(
+                                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    ) {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("AI", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    if (songQueue.isNotEmpty()) {
+                                        IconButton(
+                                            onClick = onClearQueue,
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(Icons.Default.DeleteOutline, contentDescription = "Xóa tất cả", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                                        }
                                     }
                                 }
                             }
@@ -2347,26 +2414,26 @@ fun M3FullScreenPlayer(
                         }
                     }
 
-                    // Custom Volume Boost Chip (0% to 250%)
+                    // Custom Volume Boost Chip (0% to 300%)
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = if (customVolume > 100) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        border = BorderStroke(1.dp, if (customVolume > 100) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant),
+                        color = if (customVolume >= 150) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(1.dp, if (customVolume >= 150) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier.clickable { showVolumeDialog = true }
                     ) {
                         Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = if (customVolume > 100) Icons.Default.VolumeUp else Icons.Default.VolumeDown,
+                                imageVector = if (customVolume >= 150) Icons.Default.VolumeUp else Icons.Default.VolumeDown,
                                 contentDescription = null,
                                 modifier = Modifier.size(13.dp),
-                                tint = if (customVolume > 100) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                tint = if (customVolume >= 150) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = "$customVolume%",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (customVolume > 100) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface
+                                color = if (customVolume >= 150) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -2524,6 +2591,9 @@ fun VolumeBoostDialog(
     onVolumeChange: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val isHighVolume = currentVolume >= 150
+    val presets = listOf(25, 50, 75, 100, 125, 150, 200, 250, 300)
+
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -2532,38 +2602,59 @@ fun VolumeBoostDialog(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(
-                    imageVector = if (currentVolume > 100) Icons.Default.VolumeUp else Icons.Default.VolumeDown,
+                    imageVector = if (isHighVolume) Icons.Default.VolumeUp else Icons.Default.VolumeDown,
                     contentDescription = null,
-                    tint = if (currentVolume > 100) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    tint = if (isHighVolume) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                 )
                 Text("Âm lượng ứng dụng ($currentVolume%)", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
-                    text = "Tùy biến âm lượng từ 0% đến 250% (kết hợp DSP Gain Boost khi vượt quá 100%).",
+                    text = "Tùy biến âm lượng từ 0% đến 300% (kết hợp DSP Gain Boost khi vượt quá 100%).",
                     fontSize = 12.5.sp,
                     color = MaterialTheme.colorScheme.outline
                 )
 
                 Slider(
                     value = currentVolume.toFloat(),
-                    onValueChange = { onVolumeChange(it.toInt()) },
-                    valueRange = 0f..250f,
+                    onVolumeChange = { onVolumeChange(it.toInt()) },
+                    valueRange = 0f..300f,
                     colors = SliderDefaults.colors(
-                        thumbColor = if (currentVolume > 100) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                        activeTrackColor = if (currentVolume > 100) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        thumbColor = if (isHighVolume) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        activeTrackColor = if (isHighVolume) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                     )
                 )
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("0%", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
                     Text("100% (Chuẩn)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Text("250% (DSP Boost)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                    Text("300% (Max DSP)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                 }
 
-                if (currentVolume > 100) {
+                // Quick preset buttons: 25%, 50%, 75%, 100%, 125%, 150%, 200%, 250%, 300%
+                Text("Tùy chọn nhanh:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    presets.forEach { preset ->
+                        val isSelected = currentVolume == preset
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onVolumeChange(preset) },
+                            label = { Text("$preset%", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = if (preset >= 150) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = if (preset >= 150) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
+                    }
+                }
+
+                if (isHighVolume) {
                     Surface(
                         color = MaterialTheme.colorScheme.errorContainer,
                         shape = RoundedCornerShape(12.dp)
@@ -2571,7 +2662,7 @@ fun VolumeBoostDialog(
                         Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("⚠️", fontSize = 18.sp)
                             Text(
-                                text = "Cảnh báo âm lượng cao (> 100%): Mức âm lượng khuyếch đại DSP Boost có thể gây tổn hại thính giác nếu nghe bằng tai nghe trong thời gian dài và có thể gây méo tiếng trên một số thiết bị loa.",
+                                text = "Cảnh báo âm lượng cao (≥ 150%): Mức âm lượng khuyếch đại DSP Boost mạnh có thể gây hại thính giác nếu nghe qua tai nghe liên tục và có thể gây méo âm thanh trên loa nhỏ.",
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                                 lineHeight = 16.sp

@@ -118,8 +118,19 @@ class PlaybackService : MediaSessionService() {
             }
         }
 
+        val openAppIntent = Intent(this, com.litemusic.app.MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val sessionActivityPendingIntent = android.app.PendingIntent.getActivity(
+            this,
+            0,
+            openAppIntent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+
         mediaSession = MediaSession.Builder(this, player)
             .setCallback(sessionCallback)
+            .setSessionActivity(sessionActivityPendingIntent)
             .build()
     }
 

@@ -73,6 +73,18 @@ class YouTubeStreamResolver(
                     }
                 }
             }
+            // Ensure 50+ results by supplementing with regular YouTube search if needed
+            if (results.size < 50) {
+                try {
+                    val additional = searchRegularVideos(query)
+                    for (song in additional) {
+                        if (results.none { it.sourceId == song.sourceId }) {
+                            results.add(song.copy(source = AudioSource.YOUTUBE_MUSIC))
+                            if (results.size >= 55) break
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
         } catch (e: Exception) {
             Log.e(tag, "Search error for query: $query", e)
         }
@@ -143,10 +155,63 @@ class YouTubeStreamResolver(
                     )
                 }
             }
+
+            // If less than 50, fetch additional results via Invidious search
+            if (results.size < 50) {
+                try {
+                    val invidiousResults = searchViaInvidious(query)
+                    for (song in invidiousResults) {
+                        if (results.none { it.sourceId == song.sourceId }) {
+                            results.add(song)
+                            if (results.size >= 55) break
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
         } catch (e: Exception) {
             Log.e(tag, "Regular video search error for: $query", e)
         }
         results
+    }
+
+    private fun searchViaInvidious(query: String): List<Song> {
+        val instances = listOf("https://invidious.f5.si", "https://inv.vern.cc")
+        for (instance in instances) {
+            try {
+                val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+                val request = Request.Builder()
+                    .url("$instance/api/v1/search?q=$encoded&type=video")
+                    .header("User-Agent", "Mozilla/5.0")
+                    .build()
+                val response = client.newCall(request).execute()
+                val body = response.body?.string() ?: continue
+                val arr = org.json.JSONArray(body)
+                val list = mutableListOf<Song>()
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val videoId = obj.optString("videoId")
+                    if (videoId.isEmpty()) continue
+                    val title = obj.optString("title").ifEmpty { "Video" }
+                    val author = obj.optString("author").ifEmpty { "YouTube" }
+                    val thumbs = obj.optJSONArray("videoThumbnails")
+                    val thumbUrl = thumbs?.optJSONObject(0)?.optString("url") ?: "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+                    val lengthSeconds = obj.optLong("lengthSeconds", 0L)
+                    list.add(
+                        Song(
+                            id = "ytv_$videoId",
+                            title = title,
+                            artist = author,
+                            thumbnailUrl = thumbUrl,
+                            durationSeconds = lengthSeconds,
+                            source = AudioSource.YOUTUBE_VIDEO,
+                            sourceId = videoId
+                        )
+                    )
+                }
+                if (list.isNotEmpty()) return list
+            } catch (_: Exception) {}
+        }
+        return emptyList()
     }
 
     private fun parseResponsiveItem(item: JSONObject): Song? {

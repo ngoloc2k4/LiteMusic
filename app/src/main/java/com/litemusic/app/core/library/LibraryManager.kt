@@ -91,8 +91,13 @@ class LibraryManager private constructor(context: Context) {
     }
 
     fun blockSong(song: Song) {
-        val set = getBlockedSongIds().toMutableSet().apply { add(song.id) }
-        val titles = getBlockedSongTitles().toMutableMap().apply { put(song.id, "${song.title} • ${song.artist}") }
+        blockSong(song.id, song.title, song.artist)
+    }
+
+    fun blockSong(songId: String, title: String = "", artist: String = "") {
+        val set = getBlockedSongIds().toMutableSet().apply { add(songId) }
+        val display = if (artist.isNotEmpty()) "$title • $artist" else title
+        val titles = getBlockedSongTitles().toMutableMap().apply { put(songId, display.ifEmpty { songId }) }
         prefs.edit()
             .putStringSet("blocked_song_ids", set)
             .putString("blocked_song_titles", JSONObject(titles as Map<*, *>).toString())

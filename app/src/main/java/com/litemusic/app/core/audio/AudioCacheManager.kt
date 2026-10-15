@@ -19,6 +19,7 @@ object AudioCacheManager {
     private const val PREFS_NAME = "litemusic_cache_prefs"
     private const val KEY_MAX_CACHE_MB = "max_cache_size_mb"
     private const val DEFAULT_CACHE_SIZE_MB = 500
+    private var simpleCache: SimpleCache? = null
 
     val okHttpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()

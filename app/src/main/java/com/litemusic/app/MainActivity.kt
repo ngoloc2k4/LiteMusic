@@ -760,7 +760,7 @@ fun MainAppScreen(
                                                 Toast.makeText(context, "Đã thêm vào danh sách chờ: ${song.title}", Toast.LENGTH_SHORT).show()
                                             },
                                             onBlockSong = {
-                                                libraryManager.blockSong(song.id, song.title, song.artist)
+                                                libraryManager.blockSong(song)
                                                 homeSongs = libraryManager.filterBlocked(homeSongs)
                                                 Toast.makeText(context, "Đã chặn bài hát: ${song.title}", Toast.LENGTH_SHORT).show()
                                             },
@@ -795,7 +795,7 @@ fun MainAppScreen(
                             },
                             isFavorite = { id -> libraryManager.isFavorite(id) },
                             onBlockSong = { song ->
-                                libraryManager.blockSong(song.id, song.title, song.artist)
+                                libraryManager.blockSong(song)
                                 searchResults = libraryManager.filterBlocked(searchResults)
                                 homeSongs = libraryManager.filterBlocked(homeSongs)
                                 Toast.makeText(context, "Đã chặn bài hát: ${song.title}", Toast.LENGTH_SHORT).show()
@@ -896,7 +896,6 @@ fun MainAppScreen(
                 }
             }
         }
-    }
 
         // Full Screen Player Sheet with Synced Lyrics & Queue
         AnimatedVisibility(

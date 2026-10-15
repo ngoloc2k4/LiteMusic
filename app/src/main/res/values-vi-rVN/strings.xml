@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LiteMusic</string>
+    <string name="notification_channel_name">Trình phát nhạc LiteMusic</string>
+    <string name="notification_channel_description">Phát nhạc nền trên LiteMusic</string>
+    <!-- Navigation -->
+    <string name="nav_home">Discover</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_library">Library</string>
+    <string name="nav_settings">Settings</string>
+    <!-- Player Controls -->
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="next">Next</string>
+    <string name="previous">Previous</string>
+    <string name="stop">Stop</string>
+    <string name="repeat_off">Repeat: Off</string>
+    <string name="repeat_all">Repeat: All</string>
+    <string name="repeat_one">Repeat: One</string>
+    <string name="shuffle">Shuffle</string>
+    <string name="queue">Queue</string>
+    <string name="lyrics">Lyrics</string>
+    <string name="now_playing">Now Playing</string>
+    <!-- Library -->
+    <string name="library_favorites">Favorites</string>
+    <string name="library_recent">Recently Played</string>
+    <string name="library_blocklist">Blocklist</string>
+    <string name="library_empty_fav">No favorite tracks yet.</string>
+    <string name="library_empty_recent">No recently played tracks.</string>
+    <string name="library_empty_blocklist">No blocked tracks or artists.</string>
+    <!-- Actions & Queue -->
+    <string name="add_to_queue">Add to Queue</string>
+    <string name="block_song">Block this track</string>
+    <string name="block_artist">Block this artist</string>
+    <string name="unblock">Unblock</string>
+    <string name="clear_cache">Clear Cache</string>
+    <string name="infinite_playback">Infinite Playback</string>
+    <string name="refresh_queue">Refresh Queue</string>
+    <string name="recommend_playlist_ai">Recommend with AI</string>
+    <string name="auto_add_related">Auto-add related songs</string>
+    <string name="auto_add_related_desc">Append related songs to queue when opening a single track</string>
+    <!-- Search -->
+    <string name="search_hint">Search songs, artists, playlists...</string>
+    <string name="search_placeholder">Type song name or YouTube link...</string>
+    <string name="quick_search">Quick Search</string>
+    <string name="search_cancel">Cancel</string>
+    <!-- Settings & Language -->
+    <string name="language">Language</string>
+    <string name="select_language">Select App Language</string>
+    <string name="language_system">System Default</string>
+    <string name="language_en">English</string>
+    <string name="language_vi">Tiếng Việt</string>
+    <string name="language_ja">日本語</string>
+    <string name="language_ko">한국어</string>
+    <string name="language_zh_cn">简体中文</string>
+    <string name="language_zh_tw">繁體中文</string>
+    <string name="language_fr">Français</string>
+    <string name="language_de">Deutsch</string>
+    <string name="language_it">Italiano</string>
+    <string name="language_es">Español</string>
+    <string name="language_pt">Português</string>
+    <string name="language_ru">Русский</string>
+    <string name="language_ar">العربية</string>
+    <string name="language_th">ไทย</string>
+    <string name="language_in">Bahasa Indonesia</string>
+    <string name="language_hi">हिन्दी</string>
+    <string name="language_tr">Türkçe</string>
+    <string name="language_pl">Polski</string>
+    <string name="language_nl">Nederlands</string>
+    <string name="language_uk">Українська</string>
+    <string name="language_sv">Svenska</string>
+    <string name="manage_cache">Cache Management</string>
+    <string name="max_cache_size">Max Cache Size</string>
+    <string name="theme_and_appearance">Theme &amp; Appearance</string>
+    <string name="crowdin_contribute">Contribute translations via Crowdin</string>
+    <string name="crowdin_desc">Help translate LiteMusic into your native language</string>
+</resources>

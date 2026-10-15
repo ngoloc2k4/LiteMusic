@@ -1,6 +1,7 @@
 package com.litemusic.app.ui.search
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,17 +14,37 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
 import com.litemusic.app.core.model.AudioSource
 import com.litemusic.app.core.model.Song
 import com.litemusic.app.feature.aimusic.ui.AiSearchTile
+
+data class SearchBrowseCategory(
+    val title: String,
+    val query: String,
+    val subtitle: String,
+    val icon: String,
+    val gradient: List<Color>
+)
+
+val BROWSE_CATEGORIES = listOf(
+    SearchBrowseCategory("V-Pop Thịnh Hành", "V-Pop Thịnh Hành", "Các hit nóng nhất hiện nay", "🔥", listOf(Color(0xFFE11D48), Color(0xFF9333EA))),
+    SearchBrowseCategory("Lo-fi Thư Giãn", "Lo-fi Chill Buổi Tối", "Thư giãn, tập trung & ngủ ngon", "☕", listOf(Color(0xFF0284C7), Color(0xFF0D9488))),
+    SearchBrowseCategory("Acoustic & Cafe", "Acoustic Nhẹ Nhàng", "Giai điệu mộc mạc lắng đọng", "🎸", listOf(Color(0xFFD97706), Color(0xFFEA580C))),
+    SearchBrowseCategory("EDM & Remix", "EDM Remix Cực Bốc", "Bùng nổ năng lượng tiệc tùng", "⚡", listOf(Color(0xFF7C3AED), Color(0xFFDB2777))),
+    SearchBrowseCategory("Gym & Workout", "Gym Workout Động Lực", "Đốt cháy calo cùng nhịp bass", "🏋️", listOf(Color(0xFFDC2626), Color(0xFF991B1B))),
+    SearchBrowseCategory("Rap Việt Đỉnh Cao", "Rap Việt", "Punchline chất, flow mượt mà", "🎤", listOf(Color(0xFF059669), Color(0xFF10B981))),
+    SearchBrowseCategory("Nhạc Mưa & Buồn", "Nhạc Mưa Chill", "Tâm trạng những ngày mưa rơi", "🌧️", listOf(Color(0xFF475569), Color(0xFF1E293B))),
+    SearchBrowseCategory("Bolero Tuyển Chọn", "Bolero Trữ Tình Hay Nhất", "Tình khúc quê hương ngọt ngào", "📻", listOf(Color(0xFFB45309), Color(0xFF78350F)))
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,14 +72,14 @@ fun SearchScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // Search Input Bar
         OutlinedTextField(
             value = searchQuery,
             onValueChange = onSearchQueryChange,
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Tìm bài hát, ca sĩ, album...", fontSize = 13.5.sp) },
+            placeholder = { Text("Tìm bài hát, nghệ sĩ, tâm trạng...", fontSize = 13.5.sp) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.primary) },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
@@ -96,58 +117,157 @@ fun SearchScreen(
         }
 
         if (searchQuery.isEmpty()) {
-            // Recent searches & trending suggestions
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Gợi ý tìm kiếm phổ biến", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.outline)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(recentSearches) { tag ->
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            modifier = Modifier.clickable { onSearchQueryChange(tag) }
-                        ) {
-                            Text(
-                                text = tag,
-                                fontSize = 12.sp,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+            // Browse & Discovery Mode
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(bottom = 90.dp)
+            ) {
+                // Section: Recent searches
+                item {
+                    Text(
+                        text = "Gợi ý tìm kiếm phổ biến",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(recentSearches) { tag ->
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                modifier = Modifier.clickable { onSearchQueryChange(tag) }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.TrendingUp, contentDescription = null, modifier = Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Text(
+                                        text = tag,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Section: Browse Categories
+                item {
+                    Column {
+                        Text(
+                            text = "Khám phá danh mục",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Duyệt tìm theo thể loại & tâm trạng phổ biến",
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+
+                // 2-column grid of categories
+                items(BROWSE_CATEGORIES.chunked(2)) { pair ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        pair.forEach { cat ->
+                            Box(modifier = Modifier.weight(1f)) {
+                                BrowseCategoryCard(
+                                    category = cat,
+                                    onClick = { onSearchQueryChange(cat.query) }
+                                )
+                            }
+                        }
+                        if (pair.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
                         }
                     }
                 }
             }
         } else {
-            // Results List
+            // Search Results Mode
             if (isSearching) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 3.dp)
+                        Text(
+                            text = "Đang tìm kiếm '$searchQuery'...",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+            } else if (searchResults.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("🔍", fontSize = 42.sp)
+                        Text(
+                            text = "Không tìm thấy kết quả phù hợp",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Thử tìm với tên bài hát khác hoặc đổi nguồn phát.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(bottom = 90.dp)
                 ) {
+                    // Top Result Hero Card
+                    val topResult = searchResults.first()
                     item {
-                        Text(
-                            text = "Kết quả tìm kiếm (${searchResults.size})",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.5.sp,
-                            color = MaterialTheme.colorScheme.outline
+                        TopResultHeroCard(
+                            song = topResult,
+                            onPlay = { onPlaySong(topResult) },
+                            onAddToQueue = { onAddToQueue(topResult) },
+                            onToggleFav = { onToggleFavorite(topResult) },
+                            isFav = isFavorite(topResult.id),
+                            isGlass = isGlass
                         )
                     }
 
-                    items(searchResults) { song ->
-                        SearchSongCard(
-                            song = song,
-                            isFav = isFavorite(song.id),
-                            onPlay = { onPlaySong(song) },
-                            onAddToQueue = { onAddToQueue(song) },
-                            onToggleFav = { onToggleFavorite(song) },
-                            onBlockSong = { onBlockSong(song) },
-                            onBlockArtist = { onBlockArtist(song.artist) },
-                            isGlass = isGlass
-                        )
+                    if (searchResults.size > 1) {
+                        item {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Bài hát khác (${searchResults.size - 1})",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.5.sp,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+
+                        items(searchResults.drop(1)) { song ->
+                            SearchSongCard(
+                                song = song,
+                                isFav = isFavorite(song.id),
+                                onPlay = { onPlaySong(song) },
+                                onAddToQueue = { onAddToQueue(song) },
+                                onToggleFav = { onToggleFavorite(song) },
+                                onBlockSong = { onBlockSong(song) },
+                                onBlockArtist = { onBlockArtist(song.artist) },
+                                isGlass = isGlass
+                            )
+                        }
                     }
 
                     // Bottom AI Search Tile - only shown for playlists, vibes, or compilations (not for single song/artist search)
@@ -160,6 +280,169 @@ fun SearchScreen(
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BrowseCategoryCard(
+    category: SearchBrowseCategory,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(78.dp)
+            .clickable { onClick() }
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Brush.linearGradient(category.gradient))
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(0.72f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = category.title,
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 13.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = category.subtitle,
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 10.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                text = category.icon,
+                fontSize = 28.sp,
+                modifier = Modifier.align(Alignment.CenterEnd)
+            )
+        }
+    }
+}
+
+@Composable
+fun TopResultHeroCard(
+    song: Song,
+    onPlay: () -> Unit,
+    onAddToQueue: () -> Unit,
+    onToggleFav: () -> Unit,
+    isFav: Boolean,
+    isGlass: Boolean = false
+) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = if (isGlass) Color(0x401E293B) else MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onPlay() }
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                text = "KẾT QUẢ HÀNG ĐẦU",
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (song.thumbnailUrl.isNotEmpty()) {
+                    AsyncImage(
+                        model = song.thumbnailUrl,
+                        contentDescription = song.title,
+                        modifier = Modifier
+                            .size(60.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(60.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🎵", fontSize = 24.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = song.title,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = song.artist,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.outline,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                IconButton(onClick = onToggleFav) {
+                    Icon(
+                        if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Yêu thích",
+                        tint = if (isFav) Color(0xFFEF4444) else MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onPlay,
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Phát ngay", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = onAddToQueue,
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Icon(Icons.Default.PlaylistAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("+ Hàng chờ", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

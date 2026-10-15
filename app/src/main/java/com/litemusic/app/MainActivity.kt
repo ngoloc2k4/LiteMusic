@@ -531,6 +531,34 @@ fun MainAppScreen(
     }
 
     var personalizedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var selectedMoodFilter by remember { mutableStateOf("Tất cả") }
+    val moodFilters = remember { listOf("Tất cả", "Thư giãn", "Năng lượng", "Tập trung", "Lãng mạn", "Tiệc tùng") }
+
+    val displayedHomeSongs = remember(homeSongs, selectedMoodFilter) {
+        when (selectedMoodFilter) {
+            "Thư giãn" -> homeSongs.filter { s ->
+                val t = (s.title + " " + s.artist).lowercase()
+                t.contains("chill") || t.contains("lofi") || t.contains("thư giãn") || t.contains("acoustic") || t.contains("mưa") || t.contains("ngủ")
+            }.ifEmpty { homeSongs }
+            "Năng lượng" -> homeSongs.filter { s ->
+                val t = (s.title + " " + s.artist).lowercase()
+                t.contains("remix") || t.contains("edm") || t.contains("sôi động") || t.contains("rap") || t.contains("gym") || t.contains("dance")
+            }.ifEmpty { homeSongs }
+            "Tập trung" -> homeSongs.filter { s ->
+                val t = (s.title + " " + s.artist).lowercase()
+                t.contains("lofi") || t.contains("piano") || t.contains("study") || t.contains("không lời") || t.contains("coffee") || t.contains("chill")
+            }.ifEmpty { homeSongs }
+            "Lãng mạn" -> homeSongs.filter { s ->
+                val t = (s.title + " " + s.artist).lowercase()
+                t.contains("yêu") || t.contains("love") || t.contains("ballad") || t.contains("tình") || t.contains("nhẹ nhàng") || t.contains("em")
+            }.ifEmpty { homeSongs }
+            "Tiệc tùng" -> homeSongs.filter { s ->
+                val t = (s.title + " " + s.artist).lowercase()
+                t.contains("vinahouse") || t.contains("bass") || t.contains("remix") || t.contains("club") || t.contains("party") || t.contains("dj")
+            }.ifEmpty { homeSongs }
+            else -> homeSongs
+        }
+    }
 
     // Fetch initial live trending music & generate personalized recommendations
     LaunchedEffect(refreshHomeTrigger) {
@@ -835,11 +863,92 @@ fun MainAppScreen(
                                         verticalArrangement = Arrangement.spacedBy(14.dp),
                                         contentPadding = PaddingValues(bottom = 90.dp)
                                     ) {
-                                    // Section 0: Personalized Recommendations (From >20s History)
-                                    if (personalizedSongs.isNotEmpty()) {
+                                        // Section 0: YouTube Music Mood Filter Pills
+                                        item {
+                                            LazyRow(
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp)
+                                            ) {
+                                                items(moodFilters) { mood ->
+                                                    val isSelected = selectedMoodFilter == mood
+                                                    Surface(
+                                                        shape = RoundedCornerShape(20.dp),
+                                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                        border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                                        modifier = Modifier.clickable { selectedMoodFilter = mood }
+                                                    ) {
+                                                        Text(
+                                                            text = mood,
+                                                            fontSize = 12.sp,
+                                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Section 1: Personalized Recommendations (From >20s History)
+                                        if (personalizedSongs.isNotEmpty()) {
+                                            item {
+                                                Text(
+                                                    text = "✨ Dành riêng cho bạn (Từ lịch sử xem)",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 15.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Spacer(modifier = Modifier.height(8.dp))
+
+                                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                    items(personalizedSongs) { song ->
+                                                        val isSongActive = activeSong?.id == song.id
+                                                        AlbumGridCard(
+                                                            song = song,
+                                                            onClick = { playTrack(song) },
+                                                            isActive = isSongActive,
+                                                            isLoading = isSongActive && isAudioLoading
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Section 2: Quick Picks Grid
                                         item {
                                             Text(
-                                                text = "✨ Dành riêng cho bạn (Từ lịch sử xem)",
+                                                text = "⚡ Nghe nhanh (Quick Grid)",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+
+                                            val quickList = displayedHomeSongs.take(4)
+                                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                quickList.chunked(2).forEach { pair ->
+                                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                        pair.forEach { song ->
+                                                            val isSongActive = activeSong?.id == song.id
+                                                            Box(modifier = Modifier.weight(1f)) {
+                                                                QuickPickTile(
+                                                                    song = song,
+                                                                    onClick = { playTrack(song) },
+                                                                    isActive = isSongActive,
+                                                                    isLoading = isSongActive && isAudioLoading
+                                                                )
+                                                            }
+                                                        }
+                                                        if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Section 3: Visual Album Grid (Horizontal Carousel)
+                                        item {
+                                            Text(
+                                                text = "🎨 Đề xuất trực quan (Visual Grid)",
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 15.sp,
                                                 color = MaterialTheme.colorScheme.onSurface
@@ -847,7 +956,7 @@ fun MainAppScreen(
                                             Spacer(modifier = Modifier.height(8.dp))
 
                                             LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                                items(personalizedSongs) { song ->
+                                                items(displayedHomeSongs.drop(4).take(8)) { song ->
                                                     val isSongActive = activeSong?.id == song.id
                                                     AlbumGridCard(
                                                         song = song,
@@ -858,73 +967,18 @@ fun MainAppScreen(
                                                 }
                                             }
                                         }
-                                    }
 
-                                    // Section 1: Quick Picks Grid
-                                    item {
-                                        Text(
-                                            text = "⚡ Nghe nhanh (Quick Grid)",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                        val quickList = homeSongs.take(4)
-                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            quickList.chunked(2).forEach { pair ->
-                                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                    pair.forEach { song ->
-                                                        val isSongActive = activeSong?.id == song.id
-                                                        Box(modifier = Modifier.weight(1f)) {
-                                                            QuickPickTile(
-                                                                song = song,
-                                                                onClick = { playTrack(song) },
-                                                                isActive = isSongActive,
-                                                                isLoading = isSongActive && isAudioLoading
-                                                            )
-                                                        }
-                                                    }
-                                                    if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
-                                                }
-                                            }
+                                        // Section 4: Detailed Track List
+                                        item {
+                                            Text(
+                                                text = "📋 Bảng xếp hạng thịnh hành (List Detail)",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
                                         }
-                                    }
 
-                                    // Section 2: Visual Album Grid (Horizontal Carousel)
-                                    item {
-                                        Text(
-                                            text = "🎨 Đề xuất trực quan (Visual Grid)",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            items(homeSongs.drop(4).take(8)) { song ->
-                                                val isSongActive = activeSong?.id == song.id
-                                                AlbumGridCard(
-                                                    song = song,
-                                                    onClick = { playTrack(song) },
-                                                    isActive = isSongActive,
-                                                    isLoading = isSongActive && isAudioLoading
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    // Section 3: Detailed Track List
-                                    item {
-                                        Text(
-                                            text = "📋 Bảng xếp hạng thịnh hành (List Detail)",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-
-                                    items(homeSongs.drop(12)) { song ->
+                                        items(displayedHomeSongs.drop(12)) { song ->
                                         val isSongActive = activeSong?.id == song.id
                                         SongListCard(
                                             song = song,

@@ -71,11 +71,14 @@ import com.litemusic.app.feature.aimusic.domain.AiGenerationState
 import com.litemusic.app.feature.aimusic.domain.AiPlaylistGenerator
 import com.litemusic.app.feature.aimusic.domain.LocalHeuristicRanker
 import com.litemusic.app.feature.aimusic.ui.AiPlaylistPreviewDialog
+import com.litemusic.app.feature.aimusic.ui.AiSearchTile
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.ui.graphics.graphicsLayer
 import com.litemusic.app.core.debug.DebugLogServer
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -1282,6 +1285,17 @@ fun M3FullScreenPlayer(
     var lastDoubleTapTime by remember { mutableLongStateOf(0L) }
     var pendingSeekTargetMs by remember { mutableLongStateOf(-1L) }
 
+    val overlayAlpha by animateFloatAsState(
+        targetValue = if (accumulatedSkipSeconds > 0 && skipFeedbackSide != 0) 1f else 0f,
+        animationSpec = tween(140),
+        label = "skipOverlayAlpha"
+    )
+    val overlayScale by animateFloatAsState(
+        targetValue = if (accumulatedSkipSeconds > 0 && skipFeedbackSide != 0) 1f else 0.8f,
+        animationSpec = tween(140),
+        label = "skipOverlayScale"
+    )
+
     LaunchedEffect(skipAnimTrigger) {
         if (skipAnimTrigger > 0) {
             delay(850)
@@ -1290,6 +1304,7 @@ fun M3FullScreenPlayer(
             pendingSeekTargetMs = -1L
         }
     }
+
 
     val lyricsListState = rememberLazyListState()
 
@@ -1726,16 +1741,17 @@ fun M3FullScreenPlayer(
                                 }
                             }
 
-                            // Animated Overlay for Double-Tap Skip Feedback with smooth entrance/exit & badge
-                            AnimatedVisibility(
-                                visible = accumulatedSkipSeconds > 0 && skipFeedbackSide != 0,
-                                enter = fadeIn(tween(120)) + scaleIn(initialScale = 0.8f),
-                                exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.8f)
-                            ) {
+                            // Animated Overlay for Double-Tap Skip Feedback with GPU accelerated fade/scale
+                            if (overlayAlpha > 0.01f) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .padding(horizontal = 24.dp),
+                                        .padding(horizontal = 24.dp)
+                                        .graphicsLayer(
+                                            alpha = overlayAlpha,
+                                            scaleX = overlayScale,
+                                            scaleY = overlayScale
+                                        ),
                                     contentAlignment = if (skipFeedbackSide == -1) Alignment.CenterStart else Alignment.CenterEnd
                                 ) {
                                     Surface(

@@ -20,7 +20,7 @@ data class Song(
     val thumbnailUrl: String = "",
     val source: AudioSource = AudioSource.YOUTUBE_MUSIC,
     val sourceId: String = id,
-    val streamUrl: String? = null,
-    val videoUrl: String? = null,
+    var streamUrl: String? = null,
+    var videoUrl: String? = null,
     val loudnessDb: Float? = null // For ReplayGain / Volume Normalization
 )

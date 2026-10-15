@@ -17,6 +17,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import coil.compose.AsyncImage
 import com.litemusic.app.core.model.AudioSource
 import com.litemusic.app.core.model.Song
 import com.litemusic.app.feature.aimusic.ui.AiSearchTile
@@ -189,19 +193,19 @@ fun SearchSongCard(
         ) {
             // Artwork
             if (song.thumbnailUrl.isNotEmpty()) {
-                coil3.compose.AsyncImage(
+                AsyncImage(
                     model = song.thumbnailUrl,
                     contentDescription = song.title,
                     modifier = Modifier
                         .size(46.dp)
-                        .androidx.compose.ui.draw.clip(RoundedCornerShape(10.dp)),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        .clip(RoundedCornerShape(10.dp)),
+                    contentScale = ContentScale.Crop
                 )
             } else {
                 Box(
                     modifier = Modifier
                         .size(46.dp)
-                        .androidx.compose.ui.draw.clip(RoundedCornerShape(10.dp)),
+                        .clip(RoundedCornerShape(10.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("🎵", fontSize = 20.sp)
@@ -216,14 +220,20 @@ fun SearchSongCard(
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.5.sp,
                     maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis
                 )
+                val durationText = if (song.durationSeconds > 0) {
+                    val m = song.durationSeconds / 60
+                    val s = song.durationSeconds % 60
+                    String.format("%02d:%02d", m, s)
+                } else ""
+                val subtitle = if (durationText.isNotEmpty()) "${song.artist} • $durationText" else song.artist
                 Text(
-                    text = "${song.artist} • ${song.durationFormatted}",
+                    text = subtitle,
                     fontSize = 11.5.sp,
                     color = MaterialTheme.colorScheme.outline,
                     maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 

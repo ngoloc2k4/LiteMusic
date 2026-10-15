@@ -1,9 +1,13 @@
 package com.litemusic.app.ui.settings
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.ui.res.stringResource
+import com.litemusic.app.R
+import com.litemusic.app.core.i18n.LocaleHelper
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -68,9 +72,12 @@ fun SettingsScreen(
 
     // Dialog States
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
     var showCacheDialog by remember { mutableStateOf(false) }
     var showSkipDialog by remember { mutableStateOf(false) }
     var showInfiniteBatchDialog by remember { mutableStateOf(false) }
+
+    var currentLanguage by remember { mutableStateOf(ThemePreferences.getAppLanguage(context)) }
 
     // Cache metrics state
     var maxCacheMb by remember { mutableIntStateOf(AudioCacheManager.getMaxCacheSizeMb(context)) }
@@ -86,6 +93,19 @@ fun SettingsScreen(
             currentColorPalette = currentColorPalette,
             onColorPaletteChange = onColorPaletteChange,
             onDismiss = { showThemeDialog = false }
+        )
+    }
+
+    if (showLanguageDialog) {
+        LanguageSelectionDialog(
+            currentLanguage = currentLanguage,
+            onSelectLanguage = { newLang ->
+                currentLanguage = newLang
+                ThemePreferences.setAppLanguage(context, newLang)
+                LocaleHelper.applyLocale(context, newLang)
+                (context as? Activity)?.recreate()
+            },
+            onDismiss = { showLanguageDialog = false }
         )
     }
 
@@ -209,6 +229,42 @@ fun SettingsScreen(
                             )
                             Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(18.dp))
                         }
+                    }
+                )
+                SettingsDivider()
+                val currentLanguageName = when (currentLanguage) {
+                    "vi" -> "Tiếng Việt"
+                    "en" -> "English"
+                    "ja" -> "日本語"
+                    "ko" -> "한국어"
+                    "zh-rCN" -> "简体中文"
+                    "zh-rTW" -> "繁體中文"
+                    "fr" -> "Français"
+                    "de" -> "Deutsch"
+                    "es" -> "Español"
+                    "it" -> "Italiano"
+                    "pt-rBR" -> "Português"
+                    "ru" -> "Русский"
+                    "ar" -> "العربية"
+                    "th" -> "ไทย"
+                    "in" -> "Bahasa Indonesia"
+                    "hi" -> "हिन्दी"
+                    "tr" -> "Türkçe"
+                    "pl" -> "Polski"
+                    "nl" -> "Nederlands"
+                    "uk" -> "Українська"
+                    "sv" -> "Svenska"
+                    else -> stringResource(R.string.language_system)
+                }
+                SettingsRow(
+                    icon = Icons.Default.Language,
+                    iconBgColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    iconTint = MaterialTheme.colorScheme.tertiary,
+                    title = stringResource(R.string.language),
+                    subtitle = currentLanguageName,
+                    onClick = { showLanguageDialog = true },
+                    trailingContent = {
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(18.dp))
                     }
                 )
             }
@@ -1022,3 +1078,97 @@ fun InfiniteBatchDialog(
         }
     )
 }
+
+@Composable
+private fun LanguageSelectionDialog(
+    currentLanguage: String,
+    onSelectLanguage: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val languages = listOf(
+        Triple("system", stringResource(R.string.language_system), "Hệ thống / System Default"),
+        Triple("vi", stringResource(R.string.language_vi), "Tiếng Việt (Việt Nam)"),
+        Triple("en", stringResource(R.string.language_en), "English (Global)"),
+        Triple("ja", stringResource(R.string.language_ja), "日本語 (日本)"),
+        Triple("ko", stringResource(R.string.language_ko), "한국어 (대한민국)"),
+        Triple("zh-rCN", stringResource(R.string.language_zh_cn), "简体中文 (中国)"),
+        Triple("zh-rTW", stringResource(R.string.language_zh_tw), "繁體中文 (台灣)"),
+        Triple("fr", stringResource(R.string.language_fr), "Français (France)"),
+        Triple("de", stringResource(R.string.language_de), "Deutsch (Deutschland)"),
+        Triple("es", stringResource(R.string.language_es), "Español (España)"),
+        Triple("it", stringResource(R.string.language_it), "Italiano (Italia)"),
+        Triple("pt-rBR", stringResource(R.string.language_pt), "Português (Brasil)"),
+        Triple("ru", stringResource(R.string.language_ru), "Русский (Россия)"),
+        Triple("ar", stringResource(R.string.language_ar), "العربية"),
+        Triple("th", stringResource(R.string.language_th), "ไทย (ประเทศไทย)"),
+        Triple("in", stringResource(R.string.language_in), "Bahasa Indonesia"),
+        Triple("hi", stringResource(R.string.language_hi), "हिन्दी (भारत)"),
+        Triple("tr", stringResource(R.string.language_tr), "Türkçe (Türkiye)"),
+        Triple("pl", stringResource(R.string.language_pl), "Polski (Polska)"),
+        Triple("nl", stringResource(R.string.language_nl), "Nederlands (Nederland)"),
+        Triple("uk", stringResource(R.string.language_uk), "Українська (Україна)"),
+        Triple("sv", stringResource(R.string.language_sv), "Svenska (Sverige)")
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.search_cancel), fontWeight = FontWeight.Bold)
+            }
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Default.Language, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.select_language), fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            }
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 380.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(languages) { (code, title, desc) ->
+                    val isSelected = currentLanguage == code
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onSelectLanguage(code)
+                                onDismiss()
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = title,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                    fontSize = 14.sp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = desc,
+                                    fontSize = 11.sp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.outline
+                                )
+                            }
+                            if (isSelected) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+

@@ -97,6 +97,14 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.res.stringResource
+import com.litemusic.app.R
+import com.litemusic.app.core.i18n.LocaleHelper
 import com.litemusic.app.core.debug.DebugLogServer
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -106,6 +114,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(LocaleHelper.onAttach(newBase))
+    }
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var mediaController by mutableStateOf<MediaController?>(null)
@@ -196,6 +208,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onPlaySong = { song, asVideo -> playSong(song, asVideo) },
                     onSearch = { query, source -> searchSongs(query, source) },
+                    onGetRelatedSongs = { song -> ytResolver.getRelatedSongs(song) },
                     onSeek = { positionMs -> mediaController?.seekTo(positionMs) },
                     currentSong = currentPlayingSong,
                     availableVideoQualities = availableVideoQualities,
@@ -365,13 +378,15 @@ fun MainAppScreen(
     onClearLogcat: () -> Unit = {},
     availableVideoQualities: List<VideoQuality> = emptyList(),
     selectedVideoQuality: VideoQuality? = null,
-    onChangeVideoQuality: (VideoQuality) -> Unit = {}
+    onChangeVideoQuality: (VideoQuality) -> Unit = {},
+    onGetRelatedSongs: (suspend (Song) -> List<Song>)? = null
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var searchQuery by remember { mutableStateOf("") }
     var selectedSource by remember { mutableStateOf(AudioSource.YOUTUBE_MUSIC) }
     var isPlayerSheetOpen by remember { mutableStateOf(false) }
+    var showHomeSearchDialog by remember { mutableStateOf(false) }
 
     // Live Data State
     val libraryManager = remember { LibraryManager.getInstance(context) }
@@ -468,19 +483,22 @@ fun MainAppScreen(
 
         // Auto-queue related tracks if standalone track and queue is empty
         if (isAutoQueueRelated && songQueue.isEmpty()) {
-            coroutineScope.launch(Dispatchers.Default) {
+            coroutineScope.launch(Dispatchers.IO) {
                 try {
-                    val pool = (homeSongs + searchResults + libraryManager.getFavorites()).distinctBy { it.id }
+                    val liveRelated = onGetRelatedSongs?.invoke(song) ?: emptyList()
+                    val pool = (liveRelated + homeSongs + searchResults + libraryManager.getFavorites()).distinctBy { it.id }
                     val related = LocalHeuristicRanker.recommendRelatedSongs(
                         baseSong = song,
                         candidatePool = pool,
-                        targetCount = 15,
+                        targetCount = 20,
                         historySongs = libraryManager.getRecentlyPlayed()
                     )
                     val filtered = libraryManager.filterBlocked(related).filterNot { it.id == song.id }
                     if (filtered.isNotEmpty()) {
                         withContext(Dispatchers.Main) {
-                            songQueue = filtered
+                            if (songQueue.isEmpty()) {
+                                songQueue = filtered
+                            }
                         }
                     }
                 } catch (_: Exception) {}
@@ -632,7 +650,8 @@ fun MainAppScreen(
                             try {
                                 val base = activeSong ?: currentSong
                                 if (base != null) {
-                                    val candidatePool = (homeSongs + searchResults + libraryManager.getFavorites()).distinctBy { it.id }
+                                    val liveRelated = withContext(Dispatchers.IO) { onGetRelatedSongs?.invoke(base) ?: emptyList() }
+                                    val candidatePool = (liveRelated + homeSongs + searchResults + libraryManager.getFavorites()).distinctBy { it.id }
                                     val newSongs = LocalHeuristicRanker.recommendRelatedSongs(
                                         baseSong = base,
                                         candidatePool = candidatePool,
@@ -729,10 +748,10 @@ fun MainAppScreen(
                     modifier = Modifier.height(72.dp)
                 ) {
                     val items = listOf(
-                        "Khám phá" to Icons.Default.Home,
-                        "Tìm kiếm" to Icons.Default.Search,
-                        "Thư viện" to Icons.Default.LibraryMusic,
-                        "Cài đặt" to Icons.Default.Settings
+                        stringResource(R.string.nav_home) to Icons.Default.Home,
+                        stringResource(R.string.nav_search) to Icons.Default.Search,
+                        stringResource(R.string.nav_library) to Icons.Default.LibraryMusic,
+                        stringResource(R.string.nav_settings) to Icons.Default.Settings
                     )
                     items.forEachIndexed { index, (label, icon) ->
                         NavigationBarItem(
@@ -744,6 +763,9 @@ fun MainAppScreen(
                                     }
                                     refreshHomeTrigger++
                                     Toast.makeText(context, "Đang làm mới trang chủ...", Toast.LENGTH_SHORT).show()
+                                } else if (selectedNavTab == 1 && index == 1) {
+                                    searchQuery = ""
+                                    searchResults = emptyList()
                                 } else {
                                     selectedNavTab = index
                                 }
@@ -804,17 +826,18 @@ fun MainAppScreen(
                                         )
                                     }
 
-                                    Surface(
-                                        shape = RoundedCornerShape(16.dp),
-                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                    IconButton(
+                                        onClick = { showHomeSearchDialog = true },
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                                     ) {
-                                        Text(
-                                            text = if (isDspEnabled) "⚡ -14 LUFS DSP" else "⚡ DSP OFF",
-                                            fontSize = 10.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isDspEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        Icon(
+                                            Icons.Default.Search,
+                                            contentDescription = stringResource(R.string.quick_search),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
                                         )
                                     }
                                 }
@@ -1226,11 +1249,12 @@ fun MainAppScreen(
                     val base = activeSong ?: currentSong
                     if (base != null) {
                         coroutineScope.launch {
-                            val candidatePool = (homeSongs + searchResults + libraryManager.getFavorites() + libraryManager.getRecentlyPlayed()).distinctBy { it.id }
+                            val liveRelated = withContext(Dispatchers.IO) { onGetRelatedSongs?.invoke(base) ?: emptyList() }
+                            val candidatePool = (liveRelated + homeSongs + searchResults + libraryManager.getFavorites() + libraryManager.getRecentlyPlayed()).distinctBy { it.id }
                             val newSongs = LocalHeuristicRanker.recommendRelatedSongs(
                                 baseSong = base,
                                 candidatePool = candidatePool,
-                                targetCount = 20,
+                                targetCount = 25,
                                 historySongs = libraryManager.getRecentlyPlayed()
                             )
                             val filtered = libraryManager.filterBlocked(newSongs).filterNot { it.id == base.id }
@@ -1290,6 +1314,16 @@ fun MainAppScreen(
                 availableVideoQualities = availableVideoQualities,
                 selectedVideoQuality = selectedVideoQuality,
                 onChangeVideoQuality = onChangeVideoQuality
+            )
+        }
+
+        if (showHomeSearchDialog) {
+            HomeSearchDialog(
+                onSearchSubmit = { query ->
+                    searchQuery = query
+                    selectedNavTab = 1
+                },
+                onDismiss = { showHomeSearchDialog = false }
             )
         }
 
@@ -3249,4 +3283,76 @@ fun VideoQualityDialog(
         }
     )
 }
+
+@Composable
+fun HomeSearchDialog(
+    onSearchSubmit: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var query by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        delay(120)
+        try {
+            focusRequester.requestFocus()
+        } catch (_: Exception) {}
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (query.isNotBlank()) {
+                        onSearchSubmit(query.trim())
+                        onDismiss()
+                    }
+                },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(stringResource(R.string.quick_search), fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.search_cancel))
+            }
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.quick_search), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text(stringResource(R.string.search_placeholder), fontSize = 13.sp) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(
+                        onSearch = {
+                            if (query.isNotBlank()) {
+                                onSearchSubmit(query.trim())
+                                onDismiss()
+                            }
+                        }
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                    )
+                )
+            }
+        }
+    )
+}
+
 

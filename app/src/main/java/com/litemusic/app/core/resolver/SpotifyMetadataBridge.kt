@@ -34,14 +34,38 @@ class SpotifyMetadataBridge(
     )
 
     /**
-     * Fetch tracks from a public Spotify playlist / album embed without API key
+     * Fetch tracks from a public Spotify playlist / album embed or bridge search queries
      */
     suspend fun fetchPlaylistTracks(playlistIdOrQuery: String): List<Song> = withContext(Dispatchers.IO) {
+        val trimmed = playlistIdOrQuery.trim()
+
+        // If it's a search query rather than a Spotify URL/ID, bridge directly to YouTube Music
+        val isExplicitPlaylist = trimmed.contains("open.spotify.com/") ||
+                trimmed.contains("spotify:playlist:") ||
+                trimmed.contains("spotify:album:") ||
+                (trimmed.length == 22 && trimmed.all { it.isLetterOrDigit() } && !trimmed.contains(" "))
+
+        if (!isExplicitPlaylist && trimmed.isNotBlank()) {
+            val results = ytResolver.search(trimmed)
+            return@withContext results.map { song ->
+                song.copy(
+                    id = "sp_${song.sourceId}",
+                    source = AudioSource.SPOTIFY
+                )
+            }
+        }
+
         val songs = mutableListOf<Song>()
-        val playlistId = extractPlaylistId(playlistIdOrQuery)
+        val playlistId = extractPlaylistId(trimmed)
 
         try {
-            val url = "https://open.spotify.com/embed/playlist/$playlistId"
+            val url = if (trimmed.contains("album/")) {
+                val albumId = trimmed.substringAfter("album/").substringBefore("?").substringBefore("/")
+                "https://open.spotify.com/embed/album/$albumId"
+            } else {
+                "https://open.spotify.com/embed/playlist/$playlistId"
+            }
+
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
@@ -72,6 +96,12 @@ class SpotifyMetadataBridge(
                     val uri = item.optString("uri", "")
                     val trackId = if (uri.isNotEmpty()) uri.substringAfterLast(":") else "sp_$i"
 
+                    val trackCover = item.optJSONObject("album")?.optJSONArray("images")?.optJSONObject(0)?.optString("url")
+                        ?: item.optJSONObject("coverArt")?.optJSONArray("sources")?.optJSONObject(0)?.optString("url")
+                        ?: coverUrl
+
+                    val cleanCover = if (trackCover.startsWith("//")) "https:$trackCover" else trackCover
+
                     if (title.isNotEmpty()) {
                         songs.add(
                             Song(
@@ -79,7 +109,7 @@ class SpotifyMetadataBridge(
                                 title = title,
                                 artist = subtitle,
                                 durationSeconds = durationMs / 1000,
-                                thumbnailUrl = coverUrl,
+                                thumbnailUrl = cleanCover,
                                 source = AudioSource.SPOTIFY,
                                 sourceId = trackId
                             )
@@ -91,10 +121,10 @@ class SpotifyMetadataBridge(
             Log.e(tag, "Failed to load Spotify playlist $playlistId", e)
         }
 
-        // If direct playlist scrape produced nothing (e.g. user typed a song name), bridge search to YouTube Music
-        if (songs.isEmpty() && playlistIdOrQuery.isNotBlank()) {
-            val fallback = ytResolver.search(playlistIdOrQuery)
-            return@withContext fallback.map { it.copy(source = AudioSource.SPOTIFY) }
+        // Fallback to YouTube Music bridge
+        if (songs.isEmpty() && trimmed.isNotBlank()) {
+            val fallback = ytResolver.search(trimmed)
+            return@withContext fallback.map { it.copy(id = "sp_${it.sourceId}", source = AudioSource.SPOTIFY) }
         }
 
         songs
@@ -106,13 +136,16 @@ class SpotifyMetadataBridge(
             val after = trimmed.substringAfter("playlist/")
             return after.substringBefore("?").substringBefore("/")
         }
+        if (trimmed.contains("album/")) {
+            val after = trimmed.substringAfter("album/")
+            return after.substringBefore("?").substringBefore("/")
+        }
         if (trimmed.contains("spotify:playlist:")) {
             return trimmed.substringAfter("spotify:playlist:")
         }
         if (trimmed.length == 22 && trimmed.all { it.isLetterOrDigit() }) {
             return trimmed
         }
-        // Default to Today's Top Hits
         return "37i9dQZF1DXcBWIGoYBM5M"
     }
 
@@ -120,7 +153,20 @@ class SpotifyMetadataBridge(
      * Resolves a Spotify track by searching its exact (Artist + Title) on YouTube Music
      */
     suspend fun resolveTrackToPlayableStream(spotifySong: Song): String? = withContext(Dispatchers.IO) {
-        val query = "${spotifySong.artist} - ${spotifySong.title}"
+        val cleanSourceId = spotifySong.sourceId.removePrefix("sp_")
+        if (cleanSourceId.length == 11 && !cleanSourceId.contains(":") && !cleanSourceId.startsWith("http")) {
+            val ytSong = spotifySong.copy(id = cleanSourceId, sourceId = cleanSourceId, source = AudioSource.YOUTUBE_MUSIC)
+            val stream = ytResolver.resolveStreamUrl(ytSong)
+            if (stream != null) return@withContext stream
+        }
+
+        val cleanTitle = spotifySong.title.replace(Regex("\\[.*?\\]|\\(.*?\\)"), "").trim()
+        val cleanArtist = spotifySong.artist.split("•", ",", "&", "feat.", "ft.")[0].trim()
+        val query = if (cleanArtist.isNotEmpty() && !cleanArtist.equals("Spotify Artist", ignoreCase = true)) {
+            "$cleanArtist $cleanTitle"
+        } else {
+            cleanTitle
+        }
         Log.d(tag, "Resolving Spotify song to stream via YouTube: $query")
 
         val searchResults = ytResolver.search(query)

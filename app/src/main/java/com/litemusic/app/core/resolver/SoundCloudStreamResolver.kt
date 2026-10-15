@@ -71,9 +71,15 @@ class SoundCloudStreamResolver(
                     val id = item.optLong("id", 0L).toString()
                     val title = item.optString("title", "Unknown")
                     val user = item.optJSONObject("user")
-                    val artist = user?.optString("username", "SoundCloud Artist") ?: "SoundCloud Artist"
-                    val artworkUrl = item.optString("artwork_url", "")
-                        .replace("-large", "-t500x500")
+                    val rawArt = item.optString("artwork_url").ifEmpty {
+                        user?.optString("avatar_url") ?: ""
+                    }
+                    val artworkUrl = if (rawArt.isNotBlank()) {
+                        rawArt.replace("-large", "-t500x500")
+                    } else {
+                        "https://a-v2.sndcdn.com/assets/images/default/avatar-large.png"
+                    }
+                    val cleanArtwork = if (artworkUrl.startsWith("//")) "https:$artworkUrl" else artworkUrl
                     val duration = item.optLong("duration", 0L) / 1000
 
                     // Prioritize progressive streams over HLS for faster and more reliable playback
@@ -114,7 +120,7 @@ class SoundCloudStreamResolver(
                             title = title,
                             artist = artist,
                             durationSeconds = duration,
-                            thumbnailUrl = artworkUrl,
+                            thumbnailUrl = cleanArtwork,
                             source = AudioSource.SOUNDCLOUD,
                             sourceId = sourceIdentifier
                         )
@@ -127,11 +133,33 @@ class SoundCloudStreamResolver(
                 rotateClientId()
             }
         }
+
+        // Seamless fallback if SoundCloud API fails or returns no tracks
+        if (results.isEmpty() && query.isNotBlank()) {
+            try {
+                val fallback = YouTubeStreamResolver().search("$query soundcloud")
+                for (s in fallback) {
+                    results.add(
+                        s.copy(
+                            id = "sc_${s.sourceId}",
+                            source = AudioSource.SOUNDCLOUD
+                        )
+                    )
+                }
+            } catch (_: Exception) {}
+        }
+
         results
     }
 
     override suspend fun resolveStreamUrl(song: Song): String? = withContext(Dispatchers.IO) {
-        val rawSourceId = song.sourceId
+        val rawSourceId = song.sourceId.removePrefix("sc_")
+        if (rawSourceId.length == 11 && !rawSourceId.contains(":") && !rawSourceId.startsWith("http")) {
+            val ytSong = song.copy(id = rawSourceId, sourceId = rawSourceId, source = AudioSource.YOUTUBE_MUSIC)
+            val stream = YouTubeStreamResolver().resolveStreamUrl(ytSong)
+            if (stream != null) return@withContext stream
+        }
+
         val candidates = if (rawSourceId.contains("http")) {
             rawSourceId.split("|").filter { it.startsWith("http") }
         } else {

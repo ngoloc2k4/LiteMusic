@@ -1,15 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">LiteMusic</string>
     <string name="notification_channel_name">Trình phát LiteMusic</string>
     <string name="notification_channel_description">Dịch vụ phát nhạc nền LiteMusic</string>
-
-    <!-- Navigation -->
     <string name="nav_home">Khám phá</string>
     <string name="nav_search">Tìm kiếm</string>
     <string name="nav_library">Thư viện</string>
     <string name="nav_settings">Cài đặt</string>
-
-    <!-- Player Controls -->
     <string name="play">Phát</string>
     <string name="pause">Tạm dừng</string>
     <string name="next">Bài tiếp theo</string>
@@ -22,21 +19,53 @@
     <string name="queue">Danh sách chờ</string>
     <string name="lyrics">Lời bài hát</string>
     <string name="now_playing">Đang phát</string>
-
-    <!-- Library -->
     <string name="library_favorites">Yêu thích</string>
     <string name="library_recent">Đã nghe gần đây</string>
     <string name="library_blocklist">Danh sách chặn</string>
     <string name="library_empty_fav">Chưa có bài hát yêu thích nào.</string>
     <string name="library_empty_recent">Chưa có bài hát đã nghe gần đây.</string>
     <string name="library_empty_blocklist">Chưa có bài hát hoặc nghệ sĩ nào bị chặn.</string>
-
-    <!-- Actions -->
     <string name="add_to_queue">Thêm vào danh sách chờ</string>
     <string name="block_song">Chặn bài hát này</string>
     <string name="block_artist">Chặn nghệ sĩ này</string>
     <string name="unblock">Bỏ chặn</string>
     <string name="clear_cache">Dọn dẹp bộ nhớ đệm</string>
     <string name="infinite_playback">Phát nhạc không giới hạn</string>
+    <string name="refresh_queue">Làm mới danh sách phát</string>
+    <string name="recommend_playlist_ai">Gợi ý với AI</string>
+    <string name="auto_add_related">Tự động thêm bài hát liên quan</string>
+    <string name="auto_add_related_desc">Tự động gợi ý và thêm các bài hát phù hợp vào hàng đợi</string>
+    <string name="search_hint">Tìm bài hát, nghệ sĩ, danh sách phát...</string>
+    <string name="search_placeholder">Nhập tên bài hát hoặc link YouTube...</string>
+    <string name="quick_search">Tìm kiếm nhanh</string>
+    <string name="search_cancel">Hủy</string>
+    <string name="language">Ngôn ngữ</string>
+    <string name="select_language">Chọn ngôn ngữ ứng dụng</string>
+    <string name="language_system">Mặc định hệ thống</string>
+    <string name="language_en">English</string>
+    <string name="language_vi">Tiếng Việt</string>
+    <string name="language_ja">日本語</string>
+    <string name="language_ko">한국어</string>
+    <string name="language_zh_cn">简体中文</string>
+    <string name="language_zh_tw">繁體中文</string>
+    <string name="language_fr">Français</string>
+    <string name="language_de">Deutsch</string>
+    <string name="language_it">Italiano</string>
+    <string name="language_es">Español</string>
+    <string name="language_pt">Português</string>
+    <string name="language_ru">Русский</string>
+    <string name="language_ar">العربية</string>
+    <string name="language_th">ไทย</string>
+    <string name="language_in">Bahasa Indonesia</string>
+    <string name="language_hi">हिन्दी</string>
+    <string name="language_tr">Türkçe</string>
+    <string name="language_pl">Polski</string>
+    <string name="language_nl">Nederlands</string>
+    <string name="language_uk">Українська</string>
+    <string name="language_sv">Svenska</string>
+    <string name="manage_cache">Quản lý bộ nhớ đệm</string>
+    <string name="max_cache_size">Dung lượng bộ nhớ đệm tối đa</string>
+    <string name="theme_and_appearance">Giao diện &amp; Màu sắc</string>
     <string name="crowdin_contribute">Đóng góp bản dịch qua Crowdin</string>
+    <string name="crowdin_desc">Giúp dịch LiteMusic sang các ngôn ngữ khác</string>
 </resources>

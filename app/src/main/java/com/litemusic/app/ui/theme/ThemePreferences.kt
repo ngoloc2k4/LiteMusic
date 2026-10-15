@@ -76,8 +76,14 @@ object ThemePreferences {
         return getPrefs(context).getBoolean(KEY_DEBUG_MODE, false)
     }
 
-    fun setDebugMode(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_DEBUG_MODE, enabled).apply()
+    private const val KEY_APP_LANGUAGE = "pref_app_language"
+
+    fun getAppLanguage(context: Context): String {
+        return getPrefs(context).getString(KEY_APP_LANGUAGE, "system") ?: "system"
+    }
+
+    fun setAppLanguage(context: Context, language: String) {
+        getPrefs(context).edit().putString(KEY_APP_LANGUAGE, language).apply()
     }
 }
 

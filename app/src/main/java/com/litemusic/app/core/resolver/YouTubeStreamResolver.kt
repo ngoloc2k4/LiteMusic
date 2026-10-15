@@ -25,8 +25,127 @@ class YouTubeStreamResolver(
     private val innerTubeUrl = "https://music.youtube.com/youtubei/v1"
     private val playerUrl = "https://www.youtube.com/youtubei/v1/player"
 
+    private fun sanitizeThumbnailUrl(rawUrl: String?, videoId: String): String {
+        if (rawUrl.isNullOrBlank()) {
+            return "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+        }
+        return when {
+            rawUrl.startsWith("//") -> "https:$rawUrl"
+            !rawUrl.startsWith("http://") && !rawUrl.startsWith("https://") -> "https://$rawUrl"
+            else -> rawUrl
+        }
+    }
+
     suspend fun getTrending(): List<Song> {
         return search("Top thịnh hành Việt Nam")
+    }
+
+    /**
+     * Retrieve related songs for the currently playing track.
+     * Uses YouTube Music's native Auto-Mix Radio (RDAMVM$videoId) via InnerTube Next endpoint,
+     * falling back to artist radio search if needed.
+     */
+    suspend fun getRelatedSongs(song: Song): List<Song> = withContext(Dispatchers.IO) {
+        val videoId = song.sourceId.ifEmpty { song.id.removePrefix("ytv_") }
+        val results = mutableListOf<Song>()
+
+        if (videoId.isNotEmpty()) {
+            try {
+                val payload = JSONObject().apply {
+                    put("context", getWebRemixContext())
+                    put("videoId", videoId)
+                    put("playlistId", "RDAMVM$videoId")
+                }
+
+                val request = Request.Builder()
+                    .url("$innerTubeUrl/next")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("Referer", "https://music.youtube.com/")
+                    .post(payload.toString().toRequestBody(jsonMediaType))
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val body = response.body?.string()
+                if (body != null) {
+                    val json = JSONObject(body)
+                    val tabs = json.optJSONObject("contents")
+                        ?.optJSONObject("singleColumnMusicWatchNextResultsRenderer")
+                        ?.optJSONObject("tabbedRenderer")
+                        ?.optJSONObject("watchNextTabbedResultsRenderer")
+                        ?.optJSONArray("tabs")
+
+                    if (tabs != null) {
+                        for (i in 0 until tabs.length()) {
+                            val queue = tabs.optJSONObject(i)
+                                ?.optJSONObject("tabRenderer")
+                                ?.optJSONObject("content")
+                                ?.optJSONObject("musicQueueRenderer")
+                                ?.optJSONObject("content")
+                                ?.optJSONObject("playlistPanelRenderer")
+                                ?.optJSONArray("contents")
+
+                            if (queue != null) {
+                                for (j in 0 until queue.length()) {
+                                    val vr = queue.optJSONObject(j)?.optJSONObject("playlistPanelVideoRenderer") ?: continue
+                                    val itemVid = vr.optString("videoId")
+                                    if (itemVid.isEmpty() || itemVid == videoId) continue
+
+                                    val title = vr.optJSONObject("title")?.optJSONArray("runs")
+                                        ?.optJSONObject(0)?.optString("text") ?: ""
+                                    val artist = vr.optJSONObject("longBylineText")?.optJSONArray("runs")
+                                        ?.optJSONObject(0)?.optString("text")
+                                        ?: vr.optJSONObject("shortBylineText")?.optJSONArray("runs")
+                                            ?.optJSONObject(0)?.optString("text") ?: "YouTube Music"
+
+                                    val thumbs = vr.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
+                                    val rawThumb = thumbs?.optJSONObject(thumbs.length() - 1)?.optString("url")
+                                    val thumbUrl = sanitizeThumbnailUrl(rawThumb, itemVid)
+
+                                    if (title.isNotEmpty() && results.none { it.sourceId == itemVid }) {
+                                        results.add(
+                                            Song(
+                                                id = itemVid,
+                                                title = title,
+                                                artist = artist,
+                                                thumbnailUrl = thumbUrl,
+                                                source = AudioSource.YOUTUBE_MUSIC,
+                                                sourceId = itemVid
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(tag, "Failed to fetch related songs via RDAMVM radio", e)
+            }
+        }
+
+        // Secondary fallback if radio returned fewer than 15 songs
+        if (results.size < 15) {
+            val cleanArtist = song.artist.split("•", ",", "&", "feat.", "ft.", "/")[0].trim()
+            val queries = listOfNotNull(
+                if (cleanArtist.isNotEmpty() && !cleanArtist.equals("YouTube", ignoreCase = true)) "$cleanArtist radio" else null,
+                if (cleanArtist.isNotEmpty() && !cleanArtist.equals("YouTube", ignoreCase = true)) cleanArtist else null,
+                if (song.title.isNotEmpty()) "${song.title} mix" else null
+            )
+
+            for (q in queries) {
+                if (results.size >= 30) break
+                try {
+                    val searchItems = search(q)
+                    for (item in searchItems) {
+                        if (item.sourceId != videoId && results.none { it.sourceId == item.sourceId }) {
+                            results.add(item)
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        results
     }
 
     override suspend fun search(query: String): List<Song> = withContext(Dispatchers.IO) {
@@ -137,11 +256,8 @@ class YouTubeStreamResolver(
                     val lengthText = vr.optJSONObject("lengthText")?.optString("simpleText") ?: ""
 
                     val thumbs = vr.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
-                    val thumbUrl = if (thumbs != null && thumbs.length() > 0) {
-                        thumbs.optJSONObject(thumbs.length() - 1)?.optString("url") ?: ""
-                    } else {
-                        "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
-                    }
+                    val rawThumb = thumbs?.optJSONObject(thumbs.length() - 1)?.optString("url")
+                    val thumbUrl = sanitizeThumbnailUrl(rawThumb, videoId)
 
                     results.add(
                         Song(
@@ -194,7 +310,8 @@ class YouTubeStreamResolver(
                     val title = obj.optString("title").ifEmpty { "Video" }
                     val author = obj.optString("author").ifEmpty { "YouTube" }
                     val thumbs = obj.optJSONArray("videoThumbnails")
-                    val thumbUrl = thumbs?.optJSONObject(0)?.optString("url") ?: "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+                    val rawThumb = thumbs?.optJSONObject(0)?.optString("url")
+                    val thumbUrl = sanitizeThumbnailUrl(rawThumb, videoId)
                     val lengthSeconds = obj.optLong("lengthSeconds", 0L)
                     list.add(
                         Song(
@@ -248,11 +365,8 @@ class YouTubeStreamResolver(
         val thumbs = item.optJSONObject("thumbnail")
             ?.optJSONObject("musicThumbnailRenderer")
             ?.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
-        val thumbUrl = if (thumbs != null && thumbs.length() > 0) {
-            thumbs.optJSONObject(thumbs.length() - 1)?.optString("url") ?: ""
-        } else {
-            "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
-        }
+        val rawThumb = thumbs?.optJSONObject(thumbs.length() - 1)?.optString("url")
+        val thumbUrl = sanitizeThumbnailUrl(rawThumb, videoId)
 
         return Song(
             id = videoId,

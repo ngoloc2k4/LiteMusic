@@ -231,7 +231,7 @@ fun SettingsScreen(
                         }
                     }
                 )
-                SettingsDivider()
+                SettingsInsetDivider()
                 val currentLanguageName = when (currentLanguage) {
                     "vi" -> "Tiếng Việt"
                     "en" -> "English"

@@ -71,6 +71,7 @@ class SoundCloudStreamResolver(
                     val id = item.optLong("id", 0L).toString()
                     val title = item.optString("title", "Unknown")
                     val user = item.optJSONObject("user")
+                    val artist = user?.optString("username", "SoundCloud Artist") ?: "SoundCloud Artist"
                     val rawArt = item.optString("artwork_url").ifEmpty {
                         user?.optString("avatar_url") ?: ""
                     }

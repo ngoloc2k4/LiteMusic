@@ -11,12 +11,25 @@ class LlmRouter(private val context: Context) {
 
     val geminiProvider = GeminiProvider()
     val openRouterProvider = OpenRouterProvider()
+    val groqProvider = com.litemusic.app.core.ai.provider.OpenAiCompatibleProvider(
+        id = "groq",
+        displayName = "Groq (Siêu tốc)",
+        defaultBaseUrl = "https://api.groq.com/openai/v1"
+    )
+    val customOpenAiProvider = com.litemusic.app.core.ai.provider.OpenAiCompatibleProvider(
+        id = "custom_openai",
+        displayName = "Tùy chỉnh (OpenAI-compatible)",
+        defaultBaseUrl = "https://api.openai.com/v1",
+        getCustomBaseUrl = { AiKeyStorage.getCustomOpenAiUrl(context) }
+    )
     val mockProvider = MockLlmProvider()
 
     fun getProvider(providerId: String): LlmProvider {
         return when (providerId) {
             "gemini" -> geminiProvider
             "openrouter" -> openRouterProvider
+            "groq" -> groqProvider
+            "custom_openai" -> customOpenAiProvider
             else -> mockProvider
         }
     }
@@ -25,6 +38,8 @@ class LlmRouter(private val context: Context) {
         return when (providerId) {
             "gemini" -> AiKeyStorage.getGeminiKey(context)
             "openrouter" -> AiKeyStorage.getOpenRouterKey(context)
+            "groq" -> AiKeyStorage.getGroqKey(context)
+            "custom_openai" -> AiKeyStorage.getCustomOpenAiKey(context)
             else -> ""
         }
     }

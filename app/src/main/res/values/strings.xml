@@ -2,4 +2,41 @@
     <string name="app_name">LiteMusic</string>
     <string name="notification_channel_name">LiteMusic Playback</string>
     <string name="notification_channel_description">LiteMusic background audio playback</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Discover</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_library">Library</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Player Controls -->
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="next">Next</string>
+    <string name="previous">Previous</string>
+    <string name="stop">Stop</string>
+    <string name="repeat_off">Repeat: Off</string>
+    <string name="repeat_all">Repeat: All</string>
+    <string name="repeat_one">Repeat: One</string>
+    <string name="shuffle">Shuffle</string>
+    <string name="queue">Queue</string>
+    <string name="lyrics">Lyrics</string>
+    <string name="now_playing">Now Playing</string>
+
+    <!-- Library -->
+    <string name="library_favorites">Favorites</string>
+    <string name="library_recent">Recently Played</string>
+    <string name="library_blocklist">Blocklist</string>
+    <string name="library_empty_fav">No favorite tracks yet.</string>
+    <string name="library_empty_recent">No recently played tracks.</string>
+    <string name="library_empty_blocklist">No blocked tracks or artists.</string>
+
+    <!-- Actions -->
+    <string name="add_to_queue">Add to Queue</string>
+    <string name="block_song">Block this track</string>
+    <string name="block_artist">Block this artist</string>
+    <string name="unblock">Unblock</string>
+    <string name="clear_cache">Clear Cache</string>
+    <string name="infinite_playback">Infinite Playback</string>
+    <string name="crowdin_contribute">Contribute translations via Crowdin</string>
 </resources>

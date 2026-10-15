@@ -33,6 +33,9 @@ fun AiSettingsSection(
     var selectedProvider by remember { mutableStateOf(AiKeyStorage.getSelectedProvider(context)) }
     var geminiKey by remember { mutableStateOf(AiKeyStorage.getGeminiKey(context)) }
     var openRouterKey by remember { mutableStateOf(AiKeyStorage.getOpenRouterKey(context)) }
+    var groqKey by remember { mutableStateOf(AiKeyStorage.getGroqKey(context)) }
+    var customOpenAiKey by remember { mutableStateOf(AiKeyStorage.getCustomOpenAiKey(context)) }
+    var customOpenAiUrl by remember { mutableStateOf(AiKeyStorage.getCustomOpenAiUrl(context)) }
     var autoFallback by remember { mutableStateOf(AiKeyStorage.isAutoFallbackLocal(context)) }
 
     var cachedModels by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -86,8 +89,19 @@ fun AiSettingsSection(
 
             // Provider Selector
             Text("Nhà cung cấp LLM chính:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("gemini" to "Gemini Free", "openrouter" to "OpenRouter", "mock" to "Cục bộ (Offline)").forEach { (id, label) ->
+            androidx.compose.foundation.lazy.LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val providers = listOf(
+                    "groq" to "⚡ Groq (Llama 3.3 Free)",
+                    "gemini" to "✨ Gemini Free",
+                    "openrouter" to "🌐 OpenRouter",
+                    "custom_openai" to "⚙️ Custom OpenAI",
+                    "mock" to "📴 Offline"
+                )
+                items(providers.size) { index ->
+                    val (id, label) = providers[index]
                     val isSelected = selectedProvider == id
                     FilterChip(
                         selected = isSelected,
@@ -96,37 +110,81 @@ fun AiSettingsSection(
                             AiKeyStorage.setSelectedProvider(context, id)
                             selectedModel = AiKeyStorage.getSelectedModel(context, id)
                         },
-                        label = { Text(label, fontSize = 11.5.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
-                        modifier = Modifier.weight(1f)
+                        label = { Text(label, fontSize = 11.5.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) }
                     )
                 }
             }
 
-            // Gemini Key Field
-            if (selectedProvider == "gemini") {
-                OutlinedTextField(
-                    value = geminiKey,
-                    onValueChange = {
-                        geminiKey = it
-                        AiKeyStorage.setGeminiKey(context, it)
-                    },
-                    label = { Text("Google Gemini API Key (Miễn phí)") },
-                    placeholder = { Text("AIzaSy...") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            } else if (selectedProvider == "openrouter") {
-                OutlinedTextField(
-                    value = openRouterKey,
-                    onValueChange = {
-                        openRouterKey = it
-                        AiKeyStorage.setOpenRouterKey(context, it)
-                    },
-                    label = { Text("OpenRouter API Key") },
-                    placeholder = { Text("sk-or-v1-...") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+            // Provider Specific Fields
+            when (selectedProvider) {
+                "groq" -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        OutlinedTextField(
+                            value = groqKey,
+                            onValueChange = {
+                                groqKey = it
+                                AiKeyStorage.setGroqKey(context, it)
+                            },
+                            label = { Text("Groq API Key (Miễn phí console.groq.com)") },
+                            placeholder = { Text("gsk_...") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text("Tốc độ xử lý hàng trăm tokens/s với Llama 3.3 70B & 3.1 8B.", fontSize = 11.sp, color = Color(0xFF10B981))
+                    }
+                }
+                "gemini" -> {
+                    OutlinedTextField(
+                        value = geminiKey,
+                        onValueChange = {
+                            geminiKey = it
+                            AiKeyStorage.setGeminiKey(context, it)
+                        },
+                        label = { Text("Google Gemini API Key (Miễn phí)") },
+                        placeholder = { Text("AIzaSy...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                "openrouter" -> {
+                    OutlinedTextField(
+                        value = openRouterKey,
+                        onValueChange = {
+                            openRouterKey = it
+                            AiKeyStorage.setOpenRouterKey(context, it)
+                        },
+                        label = { Text("OpenRouter API Key") },
+                        placeholder = { Text("sk-or-v1-...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                "custom_openai" -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = customOpenAiUrl,
+                            onValueChange = {
+                                customOpenAiUrl = it
+                                AiKeyStorage.setCustomOpenAiUrl(context, it)
+                            },
+                            label = { Text("Base URL OpenAI Compatible") },
+                            placeholder = { Text("https://api.openai.com/v1") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = customOpenAiKey,
+                            onValueChange = {
+                                customOpenAiKey = it
+                                AiKeyStorage.setCustomOpenAiKey(context, it)
+                            },
+                            label = { Text("API Key (Tùy chọn nếu chạy local)") },
+                            placeholder = { Text("sk-...") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
             }
 
             // 3-Day Model Cache Display & Manual Reload

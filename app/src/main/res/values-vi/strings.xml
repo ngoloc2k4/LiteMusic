@@ -1,0 +1,42 @@
+<resources>
+    <string name="app_name">LiteMusic</string>
+    <string name="notification_channel_name">Trình phát LiteMusic</string>
+    <string name="notification_channel_description">Dịch vụ phát nhạc nền LiteMusic</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Khám phá</string>
+    <string name="nav_search">Tìm kiếm</string>
+    <string name="nav_library">Thư viện</string>
+    <string name="nav_settings">Cài đặt</string>
+
+    <!-- Player Controls -->
+    <string name="play">Phát</string>
+    <string name="pause">Tạm dừng</string>
+    <string name="next">Bài tiếp theo</string>
+    <string name="previous">Bài trước</string>
+    <string name="stop">Dừng hẳn</string>
+    <string name="repeat_off">Không lặp</string>
+    <string name="repeat_all">Lặp danh sách</string>
+    <string name="repeat_one">Lặp 1 bài</string>
+    <string name="shuffle">Trộn ngẫu nhiên</string>
+    <string name="queue">Danh sách chờ</string>
+    <string name="lyrics">Lời bài hát</string>
+    <string name="now_playing">Đang phát</string>
+
+    <!-- Library -->
+    <string name="library_favorites">Yêu thích</string>
+    <string name="library_recent">Đã nghe gần đây</string>
+    <string name="library_blocklist">Danh sách chặn</string>
+    <string name="library_empty_fav">Chưa có bài hát yêu thích nào.</string>
+    <string name="library_empty_recent">Chưa có bài hát đã nghe gần đây.</string>
+    <string name="library_empty_blocklist">Chưa có bài hát hoặc nghệ sĩ nào bị chặn.</string>
+
+    <!-- Actions -->
+    <string name="add_to_queue">Thêm vào danh sách chờ</string>
+    <string name="block_song">Chặn bài hát này</string>
+    <string name="block_artist">Chặn nghệ sĩ này</string>
+    <string name="unblock">Bỏ chặn</string>
+    <string name="clear_cache">Dọn dẹp bộ nhớ đệm</string>
+    <string name="infinite_playback">Phát nhạc không giới hạn</string>
+    <string name="crowdin_contribute">Đóng góp bản dịch qua Crowdin</string>
+</resources>

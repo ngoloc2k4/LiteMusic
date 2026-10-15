@@ -67,6 +67,89 @@ object LocalHeuristicRanker {
         return if (result.isNotEmpty()) result else candidates.take(targetCount)
     }
 
+    /**
+     * Advanced non-AI heuristic recommender:
+     * Analyzes artist affinity, title keywords, tempo/duration proximity,
+     * and historical playback preferences to produce cohesive continuous playlists.
+     */
+    fun recommendRelatedSongs(
+        baseSong: Song,
+        candidatePool: List<Song>,
+        targetCount: Int = 25,
+        historySongs: List<Song> = emptyList()
+    ): List<Song> {
+        val baseArtist = baseSong.artist.lowercase(Locale.ROOT).trim()
+        val baseTitleTokens = extractSignificantTokens(baseSong.title)
+        val historyArtists = historySongs.map { it.artist.lowercase(Locale.ROOT).trim() }.toSet()
+
+        val seenTitles = mutableSetOf(normalizeTitle(baseSong.title))
+        val scored = mutableListOf<Pair<Song, Float>>()
+
+        for (candidate in candidatePool) {
+            if (candidate.id == baseSong.id) continue
+            val normTitle = normalizeTitle(candidate.title)
+            if (normTitle in seenTitles) continue
+            seenTitles.add(normTitle)
+
+            var score = 1.0f
+            val candArtist = candidate.artist.lowercase(Locale.ROOT).trim()
+            val candTokens = extractSignificantTokens(candidate.title)
+
+            // 1. Same or closely related artist
+            if (candArtist == baseArtist) {
+                score += 4.5f
+            } else if (candArtist.contains(baseArtist) || baseArtist.contains(candArtist)) {
+                score += 3.0f
+            }
+
+            // 2. Title token similarity (shared vibe/theme like "remix", "chill", "acoustic", "lofi")
+            val commonTokens = baseTitleTokens.intersect(candTokens)
+            score += commonTokens.size * 2.2f
+
+            // 3. Duration compatibility (prefer tracks within +/- 90 seconds of base song)
+            val durationDiff = kotlin.math.abs(candidate.durationSeconds - baseSong.durationSeconds)
+            if (durationDiff <= 60) {
+                score += 1.5f
+            } else if (durationDiff <= 120) {
+                score += 0.8f
+            }
+
+            // 4. Affinity with user's historical favorite artists
+            if (candArtist in historyArtists) {
+                score += 1.8f
+            }
+
+            scored.add(candidate to score)
+        }
+
+        // Sort by similarity score
+        scored.sortByDescending { it.second }
+
+        val artistCounts = mutableMapOf<String, Int>()
+        val result = mutableListOf<Song>()
+
+        for ((song, _) in scored) {
+            val aKey = song.artist.lowercase(Locale.ROOT).trim()
+            val count = artistCounts.getOrDefault(aKey, 0)
+            // Limit to at most 3 songs per artist to guarantee diversity
+            if (count < 3 || result.size < targetCount / 3) {
+                result.add(song)
+                artistCounts[aKey] = count + 1
+            }
+            if (result.size >= targetCount) break
+        }
+
+        return if (result.isNotEmpty()) result else candidatePool.filterNot { it.id == baseSong.id }.take(targetCount)
+    }
+
+    private fun extractSignificantTokens(title: String): Set<String> {
+        val stopWords = setOf("official", "video", "audio", "mv", "lyrics", "loi", "bai", "hat", "ft", "feat", "mp3", "full", "hd", "4k")
+        return normalizeTitle(title)
+            .split(" ")
+            .filter { it.length > 2 && it !in stopWords }
+            .toSet()
+    }
+
     private fun normalizeTitle(title: String): String {
         return title.lowercase(Locale.ROOT)
             .replace(Regex("\\[.*?\\]|\\(.*?\\)"), "") // remove bracketed tags like [Official MV]

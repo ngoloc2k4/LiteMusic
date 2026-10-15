@@ -16,8 +16,9 @@ import java.util.concurrent.TimeUnit
 @OptIn(UnstableApi::class)
 object AudioCacheManager {
 
-    private var simpleCache: SimpleCache? = null
-    private const val MAX_CACHE_SIZE_BYTES = 250L * 1024 * 1024 // 250 MB LRU Cache
+    private const val PREFS_NAME = "litemusic_cache_prefs"
+    private const val KEY_MAX_CACHE_MB = "max_cache_size_mb"
+    private const val DEFAULT_CACHE_SIZE_MB = 500
 
     val okHttpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -26,15 +27,72 @@ object AudioCacheManager {
             .build()
     }
 
+    fun getMaxCacheSizeMb(context: Context): Int {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getInt(KEY_MAX_CACHE_MB, DEFAULT_CACHE_SIZE_MB).coerceIn(200, 1500)
+    }
+
+    fun setMaxCacheSizeMb(context: Context, mb: Int) {
+        val clamped = mb.coerceIn(200, 1500)
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_MAX_CACHE_MB, clamped)
+            .apply()
+    }
+
+    fun getUsedCacheSizeBytes(context: Context): Long {
+        val cacheDir = File(context.cacheDir, "audio_stream_cache")
+        return calculateDirectorySize(cacheDir)
+    }
+
+    fun getUsedCacheSizeMb(context: Context): Double {
+        return getUsedCacheSizeBytes(context).toDouble() / (1024.0 * 1024.0)
+    }
+
+    private fun calculateDirectorySize(dir: File): Long {
+        if (!dir.exists()) return 0L
+        var size = 0L
+        val files = dir.listFiles() ?: return 0L
+        for (file in files) {
+            size += if (file.isDirectory) calculateDirectorySize(file) else file.length()
+        }
+        return size
+    }
+
     @Synchronized
     fun getCache(context: Context): SimpleCache {
         if (simpleCache == null) {
+            val maxBytes = getMaxCacheSizeMb(context).toLong() * 1024L * 1024L
             val cacheDir = File(context.cacheDir, "audio_stream_cache")
-            val evictor = LeastRecentlyUsedCacheEvictor(MAX_CACHE_SIZE_BYTES)
+            val evictor = LeastRecentlyUsedCacheEvictor(maxBytes)
             val databaseProvider = StandaloneDatabaseProvider(context)
             simpleCache = SimpleCache(cacheDir, evictor, databaseProvider)
         }
         return simpleCache!!
+    }
+
+    @Synchronized
+    fun clearAllCache(context: Context): Long {
+        val bytesBefore = getUsedCacheSizeBytes(context)
+        try {
+            simpleCache?.release()
+        } catch (_: Exception) {}
+        simpleCache = null
+
+        val cacheDir = File(context.cacheDir, "audio_stream_cache")
+        deleteRecursively(cacheDir)
+
+        // Recreate directory and reinitialize
+        cacheDir.mkdirs()
+        getCache(context)
+        return bytesBefore
+    }
+
+    private fun deleteRecursively(file: File) {
+        if (file.isDirectory) {
+            file.listFiles()?.forEach { deleteRecursively(it) }
+        }
+        file.delete()
     }
 
     fun buildCacheDataSourceFactory(context: Context): DataSource.Factory {

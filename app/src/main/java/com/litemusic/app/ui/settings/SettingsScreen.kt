@@ -42,7 +42,14 @@ fun SettingsScreen(
     onDebugModeToggle: (Boolean) -> Unit = {},
     debugServerUrl: String = "http://localhost:8888",
     onCopyLogcat: () -> Unit = {},
-    onClearLogcat: () -> Unit = {}
+    onClearLogcat: () -> Unit = {},
+    isInfinitePlayback: Boolean = true,
+    onInfinitePlaybackToggle: (Boolean) -> Unit = {},
+    infiniteBatchSize: Int = 25,
+    onInfiniteBatchSizeChange: (Int) -> Unit = {},
+    isAutoQueueRelated: Boolean = true,
+    onAutoQueueRelatedToggle: (Boolean) -> Unit = {},
+    onOpenBlocklist: () -> Unit = {}
 ) {
     val isGlass = currentThemeStyle == AppThemeStyle.LIQUID_GLASS
 
@@ -377,24 +384,82 @@ fun SettingsScreen(
                         )
                     }
 
-                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-                    // Cache Clear
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Bộ nhớ đệm âm thanh (250MB LRU Cache)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                            Text("Lưu trữ nhạc offline để nghe không cần mạng", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                        }
-                        OutlinedButton(
-                            onClick = onClearCache,
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                    // Advanced Cache Management with Slider and Visual Metrics
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    var maxCacheMb by androidx.compose.runtime.remember {
+                        androidx.compose.runtime.mutableIntStateOf(com.litemusic.app.core.audio.AudioCacheManager.getMaxCacheSizeMb(context))
+                    }
+                    var usedCacheMb by androidx.compose.runtime.remember {
+                        androidx.compose.runtime.mutableDoubleStateOf(com.litemusic.app.core.audio.AudioCacheManager.getUsedCacheSizeMb(context))
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Dọn dẹp", fontSize = 11.5.sp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Bộ nhớ đệm âm thanh (Audio Cache)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                val usedFormatted = String.format(java.util.Locale.US, "%.1f", usedCacheMb)
+                                val percent = ((usedCacheMb / maxCacheMb.toDouble()) * 100).toInt().coerceIn(0, 100)
+                                Text("Đã dùng: $usedFormatted MB / $maxCacheMb MB ($percent%)", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    val freedBytes = com.litemusic.app.core.audio.AudioCacheManager.clearAllCache(context)
+                                    val freedMb = String.format(java.util.Locale.US, "%.1f", freedBytes.toDouble() / (1024.0 * 1024.0))
+                                    usedCacheMb = 0.0
+                                    android.widget.Toast.makeText(context, "Đã dọn dẹp $freedMb MB bộ nhớ đệm!", android.widget.Toast.LENGTH_SHORT).show()
+                                    onClearCache()
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.6f)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Xóa sạch", fontSize = 11.5.sp)
+                            }
+                        }
+
+                        // Progress indicator
+                        val ratio = (usedCacheMb / maxCacheMb.toDouble()).toFloat().coerceIn(0f, 1f)
+                        LinearProgressIndicator(
+                            progress = { ratio },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            color = if (ratio > 0.85f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+
+                        // Slider for Max Cache Size (200MB to 1500MB)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Dung lượng giới hạn tối đa:", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.outline)
+                            Text("$maxCacheMb MB", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        }
+
+                        Slider(
+                            value = maxCacheMb.toFloat(),
+                            onValueChange = {
+                                val rounded = ((it / 50).toInt() * 50).coerceIn(200, 1500)
+                                maxCacheMb = rounded
+                                com.litemusic.app.core.audio.AudioCacheManager.setMaxCacheSizeMb(context, rounded)
+                            },
+                            valueRange = 200f..1500f,
+                            steps = 25,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("200 MB", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
+                            Text("500 MB", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
+                            Text("1000 MB", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
+                            Text("1500 MB", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
                         }
                     }
                 }
@@ -553,7 +618,161 @@ fun SettingsScreen(
             }
         }
 
-        // Section 8: Thông tin ứng dụng
+        // Section 8: Phát nhạc liên tục & Infinite Playback
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isGlass) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow
+                ),
+                border = if (isGlass) BorderStroke(1.dp, GlassBorderDark) else CardDefaults.outlinedCardBorder()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        text = "♾️ Phát nhạc không giới hạn & Hàng đợi thông minh",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    // Auto-Queue Related Songs Toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Tự động nối bài liên quan (Auto-Queue)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                            Text("Khi mở một bài hát đơn lẻ, tự động tìm và thêm các bài tương đồng vào danh sách phát", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                        }
+                        Switch(
+                            checked = isAutoQueueRelated,
+                            onCheckedChange = onAutoQueueRelatedToggle
+                        )
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    // Infinite Playback Toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Chế độ phát vô hạn (Infinite Playback)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                            Text("Khi phát đến cuối danh sách, tự động gợi ý thêm bài mới và nối tiếp", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                        }
+                        Switch(
+                            checked = isInfinitePlayback,
+                            onCheckedChange = onInfinitePlaybackToggle
+                        )
+                    }
+
+                    // Batch Size Selector (25, 50, 75, 100)
+                    if (isInfinitePlayback) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Số lượng bài hát gợi ý thêm mỗi lượt:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf(25, 50, 75, 100).forEach { count ->
+                                    val isSelected = infiniteBatchSize == count
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { onInfiniteBatchSizeChange(count) },
+                                        label = { Text("+$count bài", fontSize = 11.5.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section 9: Danh sách chặn & Quyền riêng tư
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isGlass) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow
+                ),
+                border = if (isGlass) BorderStroke(1.dp, GlassBorderDark) else CardDefaults.outlinedCardBorder()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "🚫 Danh sách chặn (Blocklist)",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Quản lý các bài hát và nghệ sĩ bạn đã chặn để không xuất hiện trong tìm kiếm, bảng xếp hạng hay gợi ý.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    OutlinedButton(
+                        onClick = onOpenBlocklist,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Block, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Xem và chỉnh sửa danh sách chặn", fontSize = 12.5.sp)
+                    }
+                }
+            }
+        }
+
+        // Section 10: Đa ngôn ngữ (i18n) & Crowdin
+        item {
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isGlass) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow
+                ),
+                border = if (isGlass) BorderStroke(1.dp, GlassBorderDark) else CardDefaults.outlinedCardBorder()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Translate, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = "🌐 Đa ngôn ngữ & Đóng góp Crowdin",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Text(
+                        text = "LiteMusic hỗ trợ đa ngôn ngữ theo chuẩn Android i18n (Tiếng Việt, English,...). Bạn có thể tham gia dịch thuật cộng đồng qua nền tảng Crowdin.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Button(
+                        onClick = {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://crowdin.com/project/litemusic"))
+                            try {
+                                ctx.startActivity(intent)
+                            } catch (_: Exception) {
+                                android.widget.Toast.makeText(ctx, "Mở trình duyệt: https://crowdin.com/project/litemusic", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Đóng góp bản dịch trên Crowdin", fontSize = 12.5.sp)
+                    }
+                }
+            }
+        }
+
+        // Section 11: Thông tin ứng dụng
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),

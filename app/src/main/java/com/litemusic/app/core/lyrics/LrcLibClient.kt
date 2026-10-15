@@ -16,29 +16,68 @@ data class LyricLine(
 )
 
 /**
- * Open-source, free synced lyrics integration via LRCLIB (no API key required)
+ * Robust Multi-Source Synced & Plain Lyrics Resolver (LRCLIB + Lyrics.ovh + Karalyr)
+ * Includes intelligent title/artist cleaner for YouTube music & videos.
  */
 class LrcLibClient(
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
         .build()
 ) {
     private val tag = "LrcLibClient"
     private val lrcPattern = Pattern.compile("""\[(\d{2}):(\d{2})\.(\d{2,3})](.*)""")
+    private val lyricsCache = mutableMapOf<String, List<LyricLine>>()
 
     suspend fun getLyrics(
         trackName: String,
         artistName: String,
         durationSeconds: Long = 0L
     ): List<LyricLine> = withContext(Dispatchers.IO) {
-        try {
-            val encodedTrack = URLEncoder.encode(trackName, "UTF-8")
-            val encodedArtist = URLEncoder.encode(artistName, "UTF-8")
-            var url = "https://lrclib.net/api/get?track_name=$encodedTrack&artist_name=$encodedArtist"
-            if (durationSeconds > 0) {
-                url += "&duration=$durationSeconds"
+        val cacheKey = "${trackName.trim().lowercase()}__${artistName.trim().lowercase()}"
+        lyricsCache[cacheKey]?.let { return@withContext it }
+
+        val cleanTrack = cleanTitle(trackName, artistName)
+        val cleanArt = cleanArtist(artistName)
+
+        // Tier 1: LRCLIB with cleaned title & artist
+        var result = fetchLrcLib(cleanTrack, cleanArt)
+        if (result.isNotEmpty()) {
+            lyricsCache[cacheKey] = result
+            return@withContext result
+        }
+
+        // Tier 2: LRCLIB with raw track and clean artist
+        if (cleanTrack != trackName) {
+            result = fetchLrcLib(trackName, cleanArt)
+            if (result.isNotEmpty()) {
+                lyricsCache[cacheKey] = result
+                return@withContext result
             }
+        }
+
+        // Tier 3: Lyrics.ovh fallback (excellent for Vietnamese & international songs)
+        result = fetchLyricsOvh(cleanArt, cleanTrack, durationSeconds)
+        if (result.isNotEmpty()) {
+            lyricsCache[cacheKey] = result
+            return@withContext result
+        }
+
+        // Tier 4: Karalyr mirror fallback
+        result = fetchKaralyr(cleanTrack, cleanArt)
+        if (result.isNotEmpty()) {
+            lyricsCache[cacheKey] = result
+            return@withContext result
+        }
+
+        emptyList()
+    }
+
+    private fun fetchLrcLib(title: String, artist: String): List<LyricLine> {
+        try {
+            val encTrack = URLEncoder.encode(title, "UTF-8")
+            val encArtist = URLEncoder.encode(artist, "UTF-8")
+            val url = "https://lrclib.net/api/get?track_name=$encTrack&artist_name=$encArtist"
 
             val request = Request.Builder()
                 .url(url)
@@ -46,25 +85,98 @@ class LrcLibClient(
                 .build()
 
             val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: return@withContext emptyList()
+            if (!response.isSuccessful) return emptyList()
+
+            val body = response.body?.string() ?: return emptyList()
             val json = JSONObject(body)
 
-            val syncedLyrics = json.optString("syncedLyrics", "")
-            if (syncedLyrics.isNotEmpty()) {
-                return@withContext parseLrc(syncedLyrics)
+            val synced = json.optString("syncedLyrics", "")
+            if (synced.isNotEmpty()) {
+                return parseLrc(synced)
             }
 
-            // Fallback: Plain lyrics without sync
-            val plainLyrics = json.optString("plainLyrics", "")
-            if (plainLyrics.isNotEmpty()) {
-                return@withContext plainLyrics.lines().mapIndexed { index, line ->
-                    LyricLine(index * 4000L, line)
-                }
+            val plain = json.optString("plainLyrics", "")
+            if (plain.isNotEmpty()) {
+                return parsePlain(plain, 0L)
             }
         } catch (e: Exception) {
-            Log.w(tag, "Could not fetch lyrics for $trackName - $artistName: ${e.message}")
+            Log.w(tag, "LRCLIB error for $title - $artist: ${e.message}")
         }
-        emptyList()
+        return emptyList()
+    }
+
+    private fun fetchLyricsOvh(artist: String, title: String, durationSeconds: Long): List<LyricLine> {
+        try {
+            val encArtist = URLEncoder.encode(artist, "UTF-8")
+            val encTitle = URLEncoder.encode(title, "UTF-8")
+            val url = "https://api.lyrics.ovh/v1/$encArtist/$encTitle"
+
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "LiteMusic/1.0.0")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) return emptyList()
+
+            val body = response.body?.string() ?: return emptyList()
+            val json = JSONObject(body)
+            val plain = json.optString("lyrics", "")
+            if (plain.isNotEmpty()) {
+                return parsePlain(plain, durationSeconds)
+            }
+        } catch (e: Exception) {
+            Log.w(tag, "Lyrics.ovh error for $title - $artist: ${e.message}")
+        }
+        return emptyList()
+    }
+
+    private fun fetchKaralyr(title: String, artist: String): List<LyricLine> {
+        try {
+            val encTrack = URLEncoder.encode(title, "UTF-8")
+            val encArtist = URLEncoder.encode(artist, "UTF-8")
+            val url = "https://www.karalyr.com/api/get?track_name=$encTrack&artist_name=$encArtist"
+
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "LiteMusic/1.0.0")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) return emptyList()
+
+            val body = response.body?.string() ?: return emptyList()
+            val json = JSONObject(body)
+
+            val synced = json.optString("syncedLyrics", "")
+            if (synced.isNotEmpty()) {
+                return parseLrc(synced)
+            }
+
+            val plain = json.optString("plainLyrics", "")
+            if (plain.isNotEmpty()) {
+                return parsePlain(plain, 0L)
+            }
+        } catch (_: Exception) {}
+        return emptyList()
+    }
+
+    private fun parsePlain(plain: String, durationSeconds: Long): List<LyricLine> {
+        val rawLines = plain.lines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+        if (rawLines.isEmpty()) return emptyList()
+
+        val intervalMs = if (durationSeconds > 0) {
+            ((durationSeconds * 1000L) / rawLines.size.coerceAtLeast(1)).coerceIn(2500L, 5000L)
+        } else {
+            3500L
+        }
+
+        return rawLines.mapIndexed { idx, line ->
+            LyricLine(idx * intervalMs, line)
+        }
     }
 
     private fun parseLrc(lrcContent: String): List<LyricLine> {
@@ -83,5 +195,53 @@ class LrcLibClient(
             }
         }
         return lines.sortedBy { it.timestampMs }
+    }
+
+    fun cleanTitle(rawTitle: String, artist: String): String {
+        var t = rawTitle
+        // Remove brackets containing video/metadata keywords
+        t = t.replace(Regex("""[\(\[\{].*?(official|music video|mv|audio|lyric|lyrics|vietsub|karaoke|live|prod|ft\.|feat\.|teaser|trailer|remix).*?[\)\]\}]""", RegexOption.IGNORE_CASE), "")
+        // Remove standalone noise phrases
+        t = t.replace(Regex("""\b(official music video|official video|official audio|music video|lyric video|lyrics video|mv)\b""", RegexOption.IGNORE_CASE), "")
+
+        // Handle pipe separators (|)
+        if (t.contains("|")) {
+            val parts = t.split("|").map { it.trim() }.filter { it.length > 1 }
+            val nonNoise = parts.filterNot { it.contains(Regex("""official|mv|video|audio""", RegexOption.IGNORE_CASE)) }
+            if (nonNoise.size > 1 && artist.isNotBlank()) {
+                val nonArtist = nonNoise.filterNot { it.contains(artist, ignoreCase = true) }
+                t = if (nonArtist.isNotEmpty()) nonArtist.first() else nonNoise.first()
+            } else if (nonNoise.isNotEmpty()) {
+                t = nonNoise.first()
+            }
+        }
+
+        // Handle dash separators ( - )
+        if (t.contains(" - ")) {
+            val parts = t.split(" - ").map { it.trim() }.filter { it.isNotBlank() }
+            if (parts.size >= 2) {
+                t = if (artist.isNotBlank() && parts[0].contains(artist, ignoreCase = true)) {
+                    parts[1]
+                } else if (artist.isNotBlank() && parts[1].contains(artist, ignoreCase = true)) {
+                    parts[0]
+                } else {
+                    parts[0]
+                }
+            }
+        }
+
+        // Trim leading and trailing punctuation & spaces
+        t = t.replace(Regex("""^[\|\-\:\s]+|[\|\-\:\s]+$"""), "")
+        return t.trim()
+    }
+
+    fun cleanArtist(rawArtist: String): String {
+        return rawArtist
+            .replace(" - Topic", "", ignoreCase = true)
+            .replace(" Official Channel", "", ignoreCase = true)
+            .replace(" Official", "", ignoreCase = true)
+            .replace("VEVO", "", ignoreCase = true)
+            .replace(" Records", "", ignoreCase = true)
+            .trim()
     }
 }

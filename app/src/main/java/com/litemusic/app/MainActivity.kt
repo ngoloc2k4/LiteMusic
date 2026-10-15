@@ -116,6 +116,7 @@ class MainActivity : ComponentActivity() {
     private val lrcClient = LrcLibClient()
 
     private var activeLyrics by mutableStateOf<List<LyricLine>>(emptyList())
+    private var isLyricsLoading by mutableStateOf(false)
     private var isResolvingStream by mutableStateOf(false)
     private var playJob: Job? = null
     private var availableVideoQualities by mutableStateOf<List<VideoQuality>>(emptyList())
@@ -144,6 +145,7 @@ class MainActivity : ComponentActivity() {
                 MainAppScreen(
                     mediaController = mediaController,
                     lyrics = activeLyrics,
+                    isLyricsLoading = isLyricsLoading,
                     isResolving = isResolvingStream,
                     currentThemeMode = themeMode,
                     onThemeModeChange = {
@@ -247,9 +249,15 @@ class MainActivity : ComponentActivity() {
         playJob = lifecycleScope.launch {
             isResolvingStream = true
 
-            // Fetch synced lyrics in parallel
+            // Fetch synced lyrics in parallel with robust cleaner & multi-tier fallbacks
             launch {
-                activeLyrics = lrcClient.getLyrics(song.title, song.artist, song.durationSeconds)
+                isLyricsLoading = true
+                activeLyrics = emptyList()
+                try {
+                    activeLyrics = lrcClient.getLyrics(song.title, song.artist, song.durationSeconds)
+                } finally {
+                    isLyricsLoading = false
+                }
             }
 
             val isVideoSource = (song.source == AudioSource.YOUTUBE_MUSIC || song.source == AudioSource.YOUTUBE_VIDEO)
@@ -335,6 +343,7 @@ class MainActivity : ComponentActivity() {
 fun MainAppScreen(
     mediaController: MediaController?,
     lyrics: List<LyricLine>,
+    isLyricsLoading: Boolean = false,
     isResolving: Boolean,
     currentThemeMode: AppThemeMode,
     onThemeModeChange: (AppThemeMode) -> Unit,
@@ -1148,6 +1157,7 @@ fun MainAppScreen(
                 currentPositionMs = currentPositionMs,
                 durationMs = durationMs,
                 lyrics = lyrics,
+                isLyricsLoading = isLyricsLoading,
                 playbackSpeed = playbackSpeed,
                 onSpeedChange = { newSpeed ->
                     playbackSpeed = newSpeed
@@ -1828,6 +1838,7 @@ fun M3FullScreenPlayer(
     currentPositionMs: Long,
     durationMs: Long,
     lyrics: List<LyricLine>,
+    isLyricsLoading: Boolean = false,
     playbackSpeed: Float,
     onSpeedChange: (Float) -> Unit,
     customVolume: Int,
@@ -2014,7 +2025,7 @@ fun M3FullScreenPlayer(
                         } else if (dragAmount < -25f) {
                             // Dragging UP
                             if (currentTab == FullPlayerTab.NOW_PLAYING) {
-                                if (lyrics.isNotEmpty()) {
+                                if (lyrics.isNotEmpty() || isLyricsLoading) {
                                     currentTab = FullPlayerTab.LYRICS
                                 } else {
                                     currentTab = FullPlayerTab.QUEUE
@@ -2165,16 +2176,24 @@ fun M3FullScreenPlayer(
                         }
                     }
 
-                    // Lyrics Button (hidden if no lyrics)
-                    if (lyrics.isNotEmpty()) {
+                    // Lyrics Button (visible if lyrics exist OR currently loading)
+                    if (lyrics.isNotEmpty() || isLyricsLoading) {
                         IconButton(onClick = {
                             currentTab = if (currentTab == FullPlayerTab.LYRICS) FullPlayerTab.NOW_PLAYING else FullPlayerTab.LYRICS
                         }) {
-                            Icon(
-                                imageVector = if (currentTab == FullPlayerTab.LYRICS) Icons.Default.MusicNote else Icons.Default.Lyrics,
-                                contentDescription = "Toggle Lyrics",
-                                tint = if (currentTab == FullPlayerTab.LYRICS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                            )
+                            if (isLyricsLoading && lyrics.isEmpty()) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = if (currentTab == FullPlayerTab.LYRICS) Icons.Default.MusicNote else Icons.Default.Lyrics,
+                                    contentDescription = "Toggle Lyrics",
+                                    tint = if (currentTab == FullPlayerTab.LYRICS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 }
@@ -2390,9 +2409,32 @@ fun M3FullScreenPlayer(
                         }
                     }
                     FullPlayerTab.LYRICS -> {
-                        if (lyrics.isEmpty()) {
+                        if (isLyricsLoading && lyrics.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text("Đang tải hoặc chưa có lời bài hát đồng bộ...", color = MaterialTheme.colorScheme.outline, fontSize = 13.sp)
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 2.5.dp)
+                                    Text("Đang tìm và tải lời bài hát...", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        } else if (lyrics.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Lyrics, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                                    Text("Không có lời bài hát", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+                                    Text(
+                                        "Bài hát hoặc video này chưa có dữ liệu lời bài hát.",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
                             }
                         } else {
                             LazyColumn(
@@ -2650,6 +2692,51 @@ fun M3FullScreenPlayer(
                                 fontWeight = FontWeight.Bold,
                                 color = if (customVolume >= 150) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface
                             )
+                        }
+                    }
+                }
+
+                // Real-Time Lyrics Peek Banner (YouTube Music / Spotify Style)
+                if (lyrics.isNotEmpty()) {
+                    val currentLine = lyrics.getOrNull(activeLyricIndex)?.text?.ifBlank { null }
+                    if (currentLine != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { currentTab = FullPlayerTab.LYRICS }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Lyrics,
+                                    contentDescription = "Lời bài hát",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = currentLine,
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Toàn màn hình ↗",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
                         }
                     }
                 }

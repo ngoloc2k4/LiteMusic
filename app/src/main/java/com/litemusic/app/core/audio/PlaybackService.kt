@@ -51,9 +51,33 @@ class PlaybackService : MediaSessionService() {
             }
         })
 
+        val sessionCallback = object : MediaSession.Callback {
+            override fun onPlaybackResumption(
+                mediaSession: MediaSession,
+                controller: MediaSession.ControllerInfo
+            ): com.google.common.util.concurrent.ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+                val currentItem = player.currentMediaItem
+                return if (currentItem != null) {
+                    com.google.common.util.concurrent.Futures.immediateFuture(
+                        MediaSession.MediaItemsWithStartPosition(
+                            listOf(currentItem),
+                            player.currentMediaItemIndex,
+                            player.currentPosition
+                        )
+                    )
+                } else {
+                    com.google.common.util.concurrent.Futures.immediateFailedFuture(
+                        UnsupportedOperationException("No active track to resume")
+                    )
+                }
+            }
+        }
+
         mediaSession = MediaSession.Builder(this, player)
+            .setCallback(sessionCallback)
             .build()
     }
+
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
         return mediaSession

@@ -56,6 +56,10 @@ import com.litemusic.app.ui.settings.SettingsScreen
 import com.litemusic.app.ui.theme.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.ui.PlayerView
+import androidx.media3.ui.AspectRatioFrameLayout
+import com.litemusic.app.core.audio.AudioEffectManager
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -123,13 +127,16 @@ class MainActivity : ComponentActivity() {
                             Toast.makeText(this, "Đã dọn dẹp!", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    onPlaySong = { song -> playSong(song) },
+                    onPlaySong = { song, asVideo -> playSong(song, asVideo) },
                     onSearch = { query, source -> searchSongs(query, source) },
-                    onSeek = { positionMs -> mediaController?.seekTo(positionMs) }
+                    onSeek = { positionMs -> mediaController?.seekTo(positionMs) },
+                    currentSong = currentPlayingSong
                 )
             }
         }
     }
+
+    private var currentPlayingSong by mutableStateOf<Song?>(null)
 
     private fun initMediaController() {
         val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
@@ -142,12 +149,14 @@ class MainActivity : ComponentActivity() {
     private suspend fun searchSongs(query: String, source: AudioSource): List<Song> {
         return when (source) {
             AudioSource.YOUTUBE_MUSIC -> ytResolver.search(query)
+            AudioSource.YOUTUBE_VIDEO -> ytResolver.searchRegularVideos(query)
             AudioSource.SOUNDCLOUD -> scResolver.search(query)
             AudioSource.SPOTIFY -> spotifyBridge.fetchPlaylistTracks(query)
         }
     }
 
-    private fun playSong(song: Song) {
+    private fun playSong(song: Song, asVideo: Boolean = false) {
+        currentPlayingSong = song
         val controller = mediaController ?: return
         lifecycleScope.launch {
             isResolvingStream = true
@@ -157,16 +166,21 @@ class MainActivity : ComponentActivity() {
                 activeLyrics = lrcClient.getLyrics(song.title, song.artist, song.durationSeconds)
             }
 
-            // Resolve real playable stream URL from YouTube Opus / SoundCloud / Spotify Bridge
-            val url = song.streamUrl ?: when (song.source) {
-                AudioSource.YOUTUBE_MUSIC -> ytResolver.resolveStreamUrl(song)
-                AudioSource.SOUNDCLOUD -> scResolver.resolveStreamUrl(song)
-                AudioSource.SPOTIFY -> spotifyBridge.resolveTrackToPlayableStream(song)
+            // Resolve real playable stream URL from YouTube Opus / Video MP4 / SoundCloud / Spotify Bridge
+            val url = if (asVideo && (song.source == AudioSource.YOUTUBE_MUSIC || song.source == AudioSource.YOUTUBE_VIDEO)) {
+                song.videoUrl ?: ytResolver.resolveVideoStreamUrl(song) ?: ytResolver.resolveStreamUrl(song)
+            } else {
+                song.streamUrl ?: when (song.source) {
+                    AudioSource.YOUTUBE_MUSIC, AudioSource.YOUTUBE_VIDEO -> ytResolver.resolveStreamUrl(song)
+                    AudioSource.SOUNDCLOUD -> scResolver.resolveStreamUrl(song)
+                    AudioSource.SPOTIFY -> spotifyBridge.resolveTrackToPlayableStream(song)
+                }
             }
 
             isResolvingStream = false
 
             if (url != null) {
+                val curPos = controller.currentPosition
                 val mediaItem = MediaItem.Builder()
                     .setUri(Uri.parse(url))
                     .setMediaMetadata(
@@ -179,10 +193,13 @@ class MainActivity : ComponentActivity() {
                     .build()
                 controller.setMediaItem(mediaItem)
                 controller.prepare()
+                if (asVideo && curPos > 0) {
+                    controller.seekTo(curPos)
+                }
                 controller.play()
             } else {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "Không thể lấy luồng âm thanh cho bài này", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "Không thể lấy luồng âm thanh hoặc video cho bài này", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -209,10 +226,12 @@ fun MainAppScreen(
     isDspEnabled: Boolean,
     onDspToggle: (Boolean) -> Unit,
     onClearCache: () -> Unit,
-    onPlaySong: (Song) -> Unit,
+    onPlaySong: (Song, Boolean) -> Unit,
     onSearch: suspend (String, AudioSource) -> List<Song>,
-    onSeek: (Long) -> Unit
+    onSeek: (Long) -> Unit,
+    currentSong: Song? = null
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var searchQuery by remember { mutableStateOf("") }
     var selectedSource by remember { mutableStateOf(AudioSource.YOUTUBE_MUSIC) }
@@ -232,6 +251,29 @@ fun MainAppScreen(
     var currentPositionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
     var selectedNavTab by remember { mutableStateOf(0) }
+
+    // Video, Speed, Volume, and Timer controls
+    var isVideoMode by remember { mutableStateOf(false) }
+    var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
+    var customVolume by remember { mutableIntStateOf(100) }
+    var sleepTimerSeconds by remember { mutableStateOf<Long?>(null) }
+    var isStopAtEndOfTrack by remember { mutableStateOf(false) }
+
+    // Sleep Timer Live Countdown Loop
+    LaunchedEffect(sleepTimerSeconds) {
+        val s = sleepTimerSeconds
+        if (s != null && s > 0) {
+            while (sleepTimerSeconds != null && sleepTimerSeconds!! > 0) {
+                delay(1000)
+                sleepTimerSeconds = sleepTimerSeconds?.minus(1)
+            }
+            if (sleepTimerSeconds == 0L) {
+                mediaController?.pause()
+                sleepTimerSeconds = null
+                Toast.makeText(context, "Đã tắt nhạc theo hẹn giờ", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     // Fetch initial live trending music on app start
     LaunchedEffect(Unit) {
@@ -270,6 +312,11 @@ fun MainAppScreen(
                     currentTitle = it.title?.toString() ?: ""
                     currentArtist = it.artist?.toString() ?: ""
                     currentArtwork = it.artworkUri?.toString() ?: ""
+                }
+                if (isStopAtEndOfTrack && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    mediaController?.pause()
+                    isStopAtEndOfTrack = false
+                    Toast.makeText(context, "Đã dừng phát khi hết bài hát", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -451,34 +498,50 @@ fun MainAppScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // M3 Filter Chips
-                Row(
+                LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    FilterChip(
-                        selected = selectedSource == AudioSource.YOUTUBE_MUSIC,
-                        onClick = { selectedSource = AudioSource.YOUTUBE_MUSIC },
-                        label = { Text("YouTube (Opus)", fontSize = 11.5.sp) },
-                        leadingIcon = if (selectedSource == AudioSource.YOUTUBE_MUSIC) {
-                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                        } else null
-                    )
-                    FilterChip(
-                        selected = selectedSource == AudioSource.SOUNDCLOUD,
-                        onClick = { selectedSource = AudioSource.SOUNDCLOUD },
-                        label = { Text("SoundCloud", fontSize = 11.5.sp) },
-                        leadingIcon = if (selectedSource == AudioSource.SOUNDCLOUD) {
-                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                        } else null
-                    )
-                    FilterChip(
-                        selected = selectedSource == AudioSource.SPOTIFY,
-                        onClick = { selectedSource = AudioSource.SPOTIFY },
-                        label = { Text("Spotify Bridge", fontSize = 11.5.sp) },
-                        leadingIcon = if (selectedSource == AudioSource.SPOTIFY) {
-                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                        } else null
-                    )
+                    item {
+                        FilterChip(
+                            selected = selectedSource == AudioSource.YOUTUBE_MUSIC,
+                            onClick = { selectedSource = AudioSource.YOUTUBE_MUSIC },
+                            label = { Text("YouTube Music", fontSize = 11.5.sp) },
+                            leadingIcon = if (selectedSource == AudioSource.YOUTUBE_MUSIC) {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                            } else null
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = selectedSource == AudioSource.YOUTUBE_VIDEO,
+                            onClick = { selectedSource = AudioSource.YOUTUBE_VIDEO },
+                            label = { Text("YouTube Video (Only Nhạc)", fontSize = 11.5.sp) },
+                            leadingIcon = if (selectedSource == AudioSource.YOUTUBE_VIDEO) {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                            } else null
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = selectedSource == AudioSource.SOUNDCLOUD,
+                            onClick = { selectedSource = AudioSource.SOUNDCLOUD },
+                            label = { Text("SoundCloud", fontSize = 11.5.sp) },
+                            leadingIcon = if (selectedSource == AudioSource.SOUNDCLOUD) {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                            } else null
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = selectedSource == AudioSource.SPOTIFY,
+                            onClick = { selectedSource = AudioSource.SPOTIFY },
+                            label = { Text("Spotify", fontSize = 11.5.sp) },
+                            leadingIcon = if (selectedSource == AudioSource.SPOTIFY) {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                            } else null
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -510,7 +573,7 @@ fun MainAppScreen(
                                         currentTitle = song.title
                                         currentArtist = song.artist
                                         currentArtwork = song.thumbnailUrl
-                                        onPlaySong(song)
+                                        onPlaySong(song, isVideoMode)
                                     })
                                 }
                             }
@@ -551,7 +614,7 @@ fun MainAppScreen(
                                                             currentTitle = song.title
                                                             currentArtist = song.artist
                                                             currentArtwork = song.thumbnailUrl
-                                                            onPlaySong(song)
+                                                            onPlaySong(song, isVideoMode)
                                                         })
                                                     }
                                                 }
@@ -579,7 +642,7 @@ fun MainAppScreen(
                                                     currentTitle = song.title
                                                     currentArtist = song.artist
                                                     currentArtwork = song.thumbnailUrl
-                                                    onPlaySong(song)
+                                                    onPlaySong(song, isVideoMode)
                                                 }
                                             )
                                         }
@@ -601,7 +664,7 @@ fun MainAppScreen(
                                         currentTitle = song.title
                                         currentArtist = song.artist
                                         currentArtwork = song.thumbnailUrl
-                                        onPlaySong(song)
+                                        onPlaySong(song, isVideoMode)
                                     })
                                 }
                             }
@@ -639,6 +702,7 @@ fun MainAppScreen(
             exit = slideOutVertically(targetOffsetY = { it })
         ) {
             M3FullScreenPlayer(
+                currentSong = currentSong,
                 title = currentTitle,
                 artist = currentArtist,
                 artworkUrl = currentArtwork,
@@ -646,6 +710,42 @@ fun MainAppScreen(
                 currentPositionMs = currentPositionMs,
                 durationMs = durationMs,
                 lyrics = lyrics,
+                playbackSpeed = playbackSpeed,
+                onSpeedChange = { newSpeed ->
+                    playbackSpeed = newSpeed
+                    mediaController?.setPlaybackSpeed(newSpeed)
+                },
+                customVolume = customVolume,
+                onVolumeChange = { newVol ->
+                    customVolume = newVol
+                    AudioEffectManager.instance.setCustomVolume(newVol) { volFloat ->
+                        mediaController?.volume = volFloat
+                    }
+                },
+                sleepTimerSeconds = sleepTimerSeconds,
+                onSetTimerMinutes = { mins ->
+                    sleepTimerSeconds = mins * 60L
+                    isStopAtEndOfTrack = false
+                    Toast.makeText(context, "Đã hẹn giờ tắt sau $mins phút", Toast.LENGTH_SHORT).show()
+                },
+                onSetEndOfTrack = {
+                    isStopAtEndOfTrack = true
+                    sleepTimerSeconds = null
+                    Toast.makeText(context, "Sẽ dừng khi hết bài hát này", Toast.LENGTH_SHORT).show()
+                },
+                onCancelTimer = {
+                    sleepTimerSeconds = null
+                    isStopAtEndOfTrack = false
+                    Toast.makeText(context, "Đã hủy hẹn giờ tắt nhạc", Toast.LENGTH_SHORT).show()
+                },
+                isVideoMode = isVideoMode,
+                onToggleVideoMode = { enableVideo ->
+                    isVideoMode = enableVideo
+                    currentSong?.let { song ->
+                        onPlaySong(song, enableVideo)
+                    }
+                },
+                mediaController = mediaController,
                 onClose = { isPlayerSheetOpen = false },
                 onPlayPause = {
                     mediaController?.let {
@@ -858,6 +958,7 @@ fun M3MiniPlayer(
 
 @Composable
 fun M3FullScreenPlayer(
+    currentSong: Song?,
     title: String,
     artist: String,
     artworkUrl: String,
@@ -865,11 +966,26 @@ fun M3FullScreenPlayer(
     currentPositionMs: Long,
     durationMs: Long,
     lyrics: List<LyricLine>,
+    playbackSpeed: Float,
+    onSpeedChange: (Float) -> Unit,
+    customVolume: Int,
+    onVolumeChange: (Int) -> Unit,
+    sleepTimerSeconds: Long?,
+    onSetTimerMinutes: (Int) -> Unit,
+    onSetEndOfTrack: () -> Unit,
+    onCancelTimer: () -> Unit,
+    isVideoMode: Boolean,
+    onToggleVideoMode: (Boolean) -> Unit,
+    mediaController: MediaController?,
     onClose: () -> Unit,
     onPlayPause: () -> Unit,
     onSeek: (Long) -> Unit
 ) {
     var isShowingLyrics by remember { mutableStateOf(false) }
+    var showSpeedDialog by remember { mutableStateOf(false) }
+    var showVolumeDialog by remember { mutableStateOf(false) }
+    var showTimerDialog by remember { mutableStateOf(false) }
+
     val lyricsListState = rememberLazyListState()
 
     val progress = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
@@ -885,6 +1001,32 @@ fun M3FullScreenPlayer(
         }
     }
 
+    if (showSpeedDialog) {
+        PlaybackSpeedDialog(
+            currentSpeed = playbackSpeed,
+            onSpeedChange = onSpeedChange,
+            onDismiss = { showSpeedDialog = false }
+        )
+    }
+
+    if (showVolumeDialog) {
+        VolumeBoostDialog(
+            currentVolume = customVolume,
+            onVolumeChange = onVolumeChange,
+            onDismiss = { showVolumeDialog = false }
+        )
+    }
+
+    if (showTimerDialog) {
+        SleepTimerDialog(
+            remainingSeconds = sleepTimerSeconds,
+            onSetTimerMinutes = onSetTimerMinutes,
+            onSetEndOfTrack = onSetEndOfTrack,
+            onCancelTimer = onCancelTimer,
+            onDismiss = { showTimerDialog = false }
+        )
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -895,11 +1037,55 @@ fun M3FullScreenPlayer(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Top Bar
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 IconButton(onClick = onClose) {
                     Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurface)
                 }
-                Text("ĐANG PHÁT", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.outline)
+
+                // Video vs Only Nhạc switch pill for YouTube sources
+                if (currentSong?.source == AudioSource.YOUTUBE_VIDEO || currentSong?.source == AudioSource.YOUTUBE_MUSIC) {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Row(modifier = Modifier.padding(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (!isVideoMode) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                modifier = Modifier.clickable { onToggleVideoMode(false) }
+                            ) {
+                                Text(
+                                    text = "🎵 Only Nhạc",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (!isVideoMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isVideoMode) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                modifier = Modifier.clickable { onToggleVideoMode(true) }
+                            ) {
+                                Text(
+                                    text = "🎬 Video",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isVideoMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Text("ĐANG PHÁT", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.outline)
+                }
+
                 IconButton(onClick = { isShowingLyrics = !isShowingLyrics }) {
                     Icon(
                         imageVector = if (isShowingLyrics) Icons.Default.MusicNote else Icons.Default.Lyrics,
@@ -909,7 +1095,7 @@ fun M3FullScreenPlayer(
                 }
             }
 
-            // Middle Section: Toggle between Big Album Art and Synced Karaoke Lyrics
+            // Middle Section: Toggle between Video Mode, Synced Karaoke Lyrics, or Big Album Art
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -917,82 +1103,159 @@ fun M3FullScreenPlayer(
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Crossfade(targetState = isShowingLyrics, label = "lyricsCrossfade") { showLyrics ->
-                    if (showLyrics) {
-                        if (lyrics.isEmpty()) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text("Đang tải hoặc chưa có lời bài hát đồng bộ...", color = MaterialTheme.colorScheme.outline, fontSize = 13.sp)
-                            }
-                        } else {
-                            LazyColumn(
-                                state = lyricsListState,
-                                modifier = Modifier.fillMaxSize(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(16.dp),
-                                contentPadding = PaddingValues(vertical = 40.dp)
-                            ) {
-                                items(lyrics.size) { index ->
-                                    val line = lyrics[index]
-                                    val isActive = index == activeLyricIndex
-                                    Text(
-                                        text = line.text,
-                                        fontSize = if (isActive) 18.sp else 14.sp,
-                                        fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Normal,
-                                        color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { onSeek(line.timestampMs) }
-                                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                                    )
+                if (isVideoMode) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(16f / 9f)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color.Black),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AndroidView(
+                            factory = { ctx ->
+                                PlayerView(ctx).apply {
+                                    player = mediaController
+                                    useController = false
+                                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                } else {
+                    Crossfade(targetState = isShowingLyrics, label = "lyricsCrossfade") { showLyrics ->
+                        if (showLyrics) {
+                            if (lyrics.isEmpty()) {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Text("Đang tải hoặc chưa có lời bài hát đồng bộ...", color = MaterialTheme.colorScheme.outline, fontSize = 13.sp)
+                                }
+                            } else {
+                                LazyColumn(
+                                    state = lyricsListState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                                    contentPadding = PaddingValues(vertical = 40.dp)
+                                ) {
+                                    items(lyrics.size) { index ->
+                                        val line = lyrics[index]
+                                        val isActive = index == activeLyricIndex
+                                        Text(
+                                            text = line.text,
+                                            fontSize = if (isActive) 18.sp else 14.sp,
+                                            fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Normal,
+                                            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { onSeek(line.timestampMs) }
+                                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                                        )
+                                    }
                                 }
                             }
-                        }
-                    } else {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            if (artworkUrl.isNotEmpty()) {
-                                AsyncImage(
-                                    model = artworkUrl,
-                                    contentDescription = title,
-                                    modifier = Modifier
-                                        .size(260.dp)
-                                        .clip(RoundedCornerShape(28.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(260.dp)
-                                        .clip(RoundedCornerShape(28.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                                    contentAlignment = Alignment.Center
-                                ) { Text("🎸", fontSize = 80.sp) }
+                        } else {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                if (artworkUrl.isNotEmpty()) {
+                                    AsyncImage(
+                                        model = artworkUrl,
+                                        contentDescription = title,
+                                        modifier = Modifier
+                                            .size(260.dp)
+                                            .clip(RoundedCornerShape(28.dp)),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(260.dp)
+                                            .clip(RoundedCornerShape(28.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                                        contentAlignment = Alignment.Center
+                                    ) { Text("🎸", fontSize = 80.sp) }
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // Song Info & DSP Badge
+            // Song Info & Badges
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(title, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(artist, fontSize = 14.sp, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Feature Action Cluster: Timer, Speed, Volume Boost
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "⚡ -14.0 LUFS DSP Active",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
+                    // Sleep Timer Chip
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (sleepTimerSeconds != null && sleepTimerSeconds > 0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.clickable { showTimerDialog = true }
+                    ) {
+                        Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (sleepTimerSeconds != null && sleepTimerSeconds > 0) formatTime(sleepTimerSeconds * 1000) else "Hẹn giờ",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    // Playback Speed Chip
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (playbackSpeed != 1.0f) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.clickable { showSpeedDialog = true }
+                    ) {
+                        Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "${String.format("%.2f", playbackSpeed)}x",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    // Custom Volume Boost Chip (0% to 250%)
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (customVolume > 100) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(1.dp, if (customVolume > 100) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.clickable { showVolumeDialog = true }
+                    ) {
+                        Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (customVolume > 100) Icons.Default.VolumeUp else Icons.Default.VolumeDown,
+                                contentDescription = null,
+                                modifier = Modifier.size(13.dp),
+                                tint = if (customVolume > 100) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "$customVolume%",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (customVolume > 100) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1050,6 +1313,260 @@ fun M3FullScreenPlayer(
             }
         }
     }
+}
+
+/**
+ * Volume Boost Controller Dialog (0% - 250%) with high volume warning
+ */
+@Composable
+fun VolumeBoostDialog(
+    currentVolume: Int,
+    onVolumeChange: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Đóng", fontWeight = FontWeight.Bold) }
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(
+                    imageVector = if (currentVolume > 100) Icons.Default.VolumeUp else Icons.Default.VolumeDown,
+                    contentDescription = null,
+                    tint = if (currentVolume > 100) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                )
+                Text("Âm lượng ứng dụng ($currentVolume%)", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = "Tùy biến âm lượng từ 0% đến 250% (kết hợp DSP Gain Boost khi vượt quá 100%).",
+                    fontSize = 12.5.sp,
+                    color = MaterialTheme.colorScheme.outline
+                )
+
+                Slider(
+                    value = currentVolume.toFloat(),
+                    onValueChange = { onVolumeChange(it.toInt()) },
+                    valueRange = 0f..250f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = if (currentVolume > 100) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        activeTrackColor = if (currentVolume > 100) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    )
+                )
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("0%", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                    Text("100% (Chuẩn)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Text("250% (DSP Boost)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                }
+
+                if (currentVolume > 100) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("⚠️", fontSize = 18.sp)
+                            Text(
+                                text = "Cảnh báo âm lượng cao (> 100%): Mức âm lượng khuyếch đại DSP Boost có thể gây tổn hại thính giác nếu nghe bằng tai nghe trong thời gian dài và có thể gây méo tiếng trên một số thiết bị loa.",
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
+/**
+ * Playback Speed Controller Dialog with 0.05 steppers and 0.25 quick preset chips
+ */
+@Composable
+fun PlaybackSpeedDialog(
+    currentSpeed: Float,
+    onSpeedChange: (Float) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val presets = listOf(0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.25f, 2.5f, 2.75f, 3.0f)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Xong", fontWeight = FontWeight.Bold) }
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text("Tốc độ phát (${String.format("%.2f", currentSpeed)}x)", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = "Điều chỉnh tốc độ phát lại từ 0.25x đến 3.0x bằng thanh trượt hoặc nút cộng/trừ 0.05x.",
+                    fontSize = 12.5.sp,
+                    color = MaterialTheme.colorScheme.outline
+                )
+
+                // Stepper Row: [-] [ Slider ] [+]
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilledTonalIconButton(
+                        onClick = {
+                            val next = (Math.round((currentSpeed - 0.05f) * 100.0) / 100.0).toFloat().coerceIn(0.25f, 3.0f)
+                            onSpeedChange(next)
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Text("-0.05", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Slider(
+                        value = currentSpeed,
+                        onValueChange = {
+                            val rounded = (Math.round(it * 100.0) / 100.0).toFloat().coerceIn(0.25f, 3.0f)
+                            onSpeedChange(rounded)
+                        },
+                        valueRange = 0.25f..3.0f,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    FilledTonalIconButton(
+                        onClick = {
+                            val next = (Math.round((currentSpeed + 0.05f) * 100.0) / 100.0).toFloat().coerceIn(0.25f, 3.0f)
+                            onSpeedChange(next)
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Text("+0.05", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Text("Chọn nhanh (bước 0.25x):", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(presets) { preset ->
+                        val isSelected = Math.abs(currentSpeed - preset) < 0.02f
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onSpeedChange(preset) },
+                            label = { Text("${preset}x", fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) }
+                        )
+                    }
+                }
+            }
+        }
+    )
+}
+
+/**
+ * Sleep Timer Dialog with quick options, end of track, and custom slider
+ */
+@Composable
+fun SleepTimerDialog(
+    remainingSeconds: Long?,
+    onSetTimerMinutes: (Int) -> Unit,
+    onSetEndOfTrack: () -> Unit,
+    onCancelTimer: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var customMinutes by remember { mutableFloatStateOf(30f) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Đóng", fontWeight = FontWeight.Bold) }
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Timer, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(
+                    text = if (remainingSeconds != null && remainingSeconds > 0)
+                        "Hẹn giờ (${formatTime(remainingSeconds * 1000)})"
+                    else "Hẹn giờ tắt nhạc",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                if (remainingSeconds != null && remainingSeconds > 0) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Đang chạy hẹn giờ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                Text("Tắt sau ${formatTime(remainingSeconds * 1000)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            }
+                            FilledTonalButton(onClick = { onCancelTimer(); onDismiss() }) {
+                                Text("Hủy")
+                            }
+                        }
+                    }
+                }
+
+                Text("Tùy chọn nhanh:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(15, 30, 45, 60).forEach { mins ->
+                        FilledTonalButton(
+                            onClick = { onSetTimerMinutes(mins); onDismiss() },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                        ) {
+                            Text("${mins}p", fontSize = 11.5.sp)
+                        }
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = { onSetEndOfTrack(); onDismiss() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.SkipNext, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Dừng khi phát hết bài hát này", fontSize = 12.sp)
+                }
+
+                HorizontalDivider()
+
+                Text("Tùy chỉnh: ${customMinutes.toInt()} phút", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Slider(
+                    value = customMinutes,
+                    onValueChange = { customMinutes = it },
+                    valueRange = 1f..120f
+                )
+                Button(
+                    onClick = { onSetTimerMinutes(customMinutes.toInt()); onDismiss() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Bắt đầu hẹn giờ (${customMinutes.toInt()} phút)")
+                }
+            }
+        }
+    )
 }
 
 private fun formatTime(millis: Long): String {

@@ -11,6 +11,10 @@ import kotlin.math.roundToInt
  */
 class AudioEffectManager {
 
+    companion object {
+        val instance = AudioEffectManager()
+    }
+
     private val tag = "AudioEffectManager"
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var currentSessionId: Int = AudioEffect.ERROR_BAD_VALUE
@@ -26,6 +30,10 @@ class AudioEffectManager {
             applyGain()
         }
 
+    // Custom volume boost percent from 0 to 250 (100 = 100% normal)
+    var volumePercent: Int = 100
+        private set
+
     private var currentTrackLoudnessDb: Float? = null
 
     fun attachAudioSession(sessionId: Int) {
@@ -36,7 +44,7 @@ class AudioEffectManager {
         try {
             currentSessionId = sessionId
             loudnessEnhancer = LoudnessEnhancer(sessionId).apply {
-                enabled = isNormalizationEnabled
+                enabled = true
             }
             applyGain()
             Log.d(tag, "Attached LoudnessEnhancer to audioSessionId: $sessionId")
@@ -54,30 +62,53 @@ class AudioEffectManager {
         applyGain()
     }
 
+    /**
+     * Set custom volume from 0% to 250%.
+     * 0%..100%: Adjusts player software volume (0.0f to 1.0f).
+     * 101%..250%: Sets player software volume to 1.0f, and boosts hardware DSP gain via LoudnessEnhancer up to +12 dB.
+     */
+    fun setCustomVolume(percent: Int, setPlayerVolume: (Float) -> Unit) {
+        val clamped = percent.coerceIn(0, 250)
+        volumePercent = clamped
+
+        if (clamped <= 100) {
+            setPlayerVolume(clamped / 100f)
+        } else {
+            setPlayerVolume(1.0f)
+        }
+        applyGain()
+    }
+
     private fun applyGain() {
         val enhancer = loudnessEnhancer ?: return
-        if (!isNormalizationEnabled) {
-            try {
-                enhancer.setTargetGain(0)
-                enhancer.enabled = false
-            } catch (e: Exception) {
-                Log.w(tag, "Could not disable LoudnessEnhancer", e)
-            }
-            return
-        }
 
-        try {
+        var normalizerGainMb = 0
+        if (isNormalizationEnabled) {
             val gainDb = currentTrackLoudnessDb?.let { trackLoudness ->
-                // Calculate compensation gain: Difference between target and current loudness
                 val diff = targetLufs - trackLoudness
                 diff.coerceIn(minGainDb, maxGainDb)
-            } ?: 0.0f // Neutral when loudness metadata is absent
+            } ?: 0.0f
+            normalizerGainMb = (gainDb * 100).roundToInt()
+        }
 
-            // 1 dB = 100 mB (millibels)
-            val gainMb = (gainDb * 100).roundToInt()
-            enhancer.setTargetGain(gainMb)
-            enhancer.enabled = true
-            Log.d(tag, "Volume Normalizer active: trackLoudness=$currentTrackLoudnessDb, targetGain=${gainMb}mB")
+        var boostGainMb = 0
+        if (volumePercent > 100) {
+            // Scale excess volume (101..250%) to 0..1200 mB (+12 dB DSP Boost)
+            val excessRatio = (volumePercent - 100) / 150f
+            boostGainMb = (excessRatio * 1200f).roundToInt()
+        }
+
+        val totalGainMb = normalizerGainMb + boostGainMb
+
+        try {
+            if (totalGainMb != 0 || isNormalizationEnabled || volumePercent > 100) {
+                enhancer.setTargetGain(totalGainMb)
+                enhancer.enabled = true
+            } else {
+                enhancer.setTargetGain(0)
+                enhancer.enabled = false
+            }
+            Log.d(tag, "Volume & Normalizer active: normalizer=${normalizerGainMb}mB, boost=${boostGainMb}mB, total=${totalGainMb}mB")
         } catch (e: Exception) {
             Log.e(tag, "Error applying target gain to LoudnessEnhancer", e)
         }

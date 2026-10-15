@@ -15,7 +15,7 @@ class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private lateinit var player: ExoPlayer
-    private val audioEffectManager = AudioEffectManager()
+    private val audioEffectManager = AudioEffectManager.instance
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {

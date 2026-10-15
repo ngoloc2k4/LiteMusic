@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class AudioSource {
     YOUTUBE_MUSIC,
+    YOUTUBE_VIDEO,
     SOUNDCLOUD,
     SPOTIFY
 }
@@ -20,5 +21,6 @@ data class Song(
     val source: AudioSource = AudioSource.YOUTUBE_MUSIC,
     val sourceId: String = id,
     val streamUrl: String? = null,
+    val videoUrl: String? = null,
     val loudnessDb: Float? = null // For ReplayGain / Volume Normalization
 )

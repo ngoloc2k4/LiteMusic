@@ -2583,8 +2583,9 @@ fun M3FullScreenPlayer(
 }
 
 /**
- * Volume Boost Controller Dialog (0% - 250%) with high volume warning
+ * Volume Boost Controller Dialog (0% - 300%) with high volume warning
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun VolumeBoostDialog(
     currentVolume: Int,
@@ -2619,7 +2620,7 @@ fun VolumeBoostDialog(
 
                 Slider(
                     value = currentVolume.toFloat(),
-                    onVolumeChange = { onVolumeChange(it.toInt()) },
+                    onValueChange = { newVol -> onVolumeChange(newVol.toInt()) },
                     valueRange = 0f..300f,
                     colors = SliderDefaults.colors(
                         thumbColor = if (isHighVolume) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,

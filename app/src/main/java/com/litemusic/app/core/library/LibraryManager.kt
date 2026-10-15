@@ -125,18 +125,42 @@ class LibraryManager private constructor(context: Context) {
         prefs.edit().putStringSet("blocked_artists", set).apply()
     }
 
+    fun getBlockedKeywords(): Set<String> {
+        return prefs.getStringSet("blocked_keywords", emptySet()) ?: emptySet()
+    }
+
+    fun blockKeyword(keyword: String) {
+        val clean = keyword.trim()
+        if (clean.isEmpty()) return
+        val set = getBlockedKeywords().toMutableSet().apply { add(clean) }
+        prefs.edit().putStringSet("blocked_keywords", set).apply()
+    }
+
+    fun unblockKeyword(keyword: String) {
+        val set = getBlockedKeywords().toMutableSet().apply { remove(keyword) }
+        prefs.edit().putStringSet("blocked_keywords", set).apply()
+    }
+
     fun isSongBlocked(song: Song): Boolean {
         if (getBlockedSongIds().contains(song.id)) return true
         val artists = getBlockedArtists()
         val songArtist = song.artist.trim().lowercase()
-        return artists.any { it.trim().lowercase() == songArtist }
+        if (artists.any { it.trim().lowercase() == songArtist || songArtist.contains(it.trim().lowercase()) }) return true
+        val keywords = getBlockedKeywords()
+        val songTitle = song.title.trim().lowercase()
+        return keywords.any { songTitle.contains(it.trim().lowercase()) }
     }
 
     fun filterBlocked(songs: List<Song>): List<Song> {
         val blockedIds = getBlockedSongIds()
-        val blockedArtists = getBlockedArtists().map { it.trim().lowercase() }.toSet()
+        val blockedArtists = getBlockedArtists().map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+        val blockedKeywords = getBlockedKeywords().map { it.trim().lowercase() }.filter { it.isNotEmpty() }
         return songs.filterNot { song ->
-            blockedIds.contains(song.id) || blockedArtists.contains(song.artist.trim().lowercase())
+            val titleLower = song.title.trim().lowercase()
+            val artistLower = song.artist.trim().lowercase()
+            blockedIds.contains(song.id) ||
+                blockedArtists.any { artistLower.contains(it) || it.contains(artistLower) } ||
+                blockedKeywords.any { titleLower.contains(it) }
         }
     }
 

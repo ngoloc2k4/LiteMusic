@@ -222,11 +222,15 @@ class YouTubeStreamResolver(
     override suspend fun resolveStreamUrl(song: Song): String? = withContext(Dispatchers.IO) {
         val videoId = song.sourceId
         
-        // 1. Try VISIONOS InnerTube client (Proven unthrottled direct streams)
+        // 1. Try VISIONOS InnerTube client
         val visionUrl = resolveViaVisionOs(videoId)
         if (visionUrl != null) return@withContext visionUrl
 
-        // 2. Fallback to Invidious API
+        // 2. Try ANDROID_VR InnerTube client
+        val androidVrUrl = resolveAudioViaAndroidVr(videoId)
+        if (androidVrUrl != null) return@withContext androidVrUrl
+
+        // 3. Fallback to Invidious API
         val invidiousUrl = resolveViaInvidious(videoId)
         if (invidiousUrl != null) return@withContext invidiousUrl
 
@@ -297,6 +301,55 @@ class YouTubeStreamResolver(
         }
     }
 
+    private fun resolveAudioViaAndroidVr(videoId: String): String? {
+        try {
+            val payload = JSONObject().apply {
+                put("context", getAndroidVrContext())
+                put("videoId", videoId)
+                put("playbackContext", JSONObject().apply {
+                    put("contentPlaybackContext", JSONObject().apply {
+                        put("html5Preference", "HTML5_PREF_WANTS")
+                    })
+                })
+            }
+
+            val request = Request.Builder()
+                .url(playerUrl)
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 12; Quest 3) AppleWebKit/537.36")
+                .header("Content-Type", "application/json")
+                .header("Origin", "https://www.youtube.com")
+                .post(payload.toString().toRequestBody(jsonMediaType))
+                .build()
+
+            val response = client.newCall(request).execute()
+            val body = response.body?.string() ?: return null
+            val json = JSONObject(body)
+
+            val streamingData = json.optJSONObject("streamingData") ?: return null
+            val adaptiveFormats = streamingData.optJSONArray("adaptiveFormats") ?: return null
+
+            var chosenUrl: String? = null
+            var highestBitrate = 0
+
+            for (i in 0 until adaptiveFormats.length()) {
+                val format = adaptiveFormats.optJSONObject(i) ?: continue
+                val mimeType = format.optString("mimeType")
+                if (mimeType.contains("audio/")) {
+                    val bitrate = format.optInt("bitrate", 0)
+                    val url = format.optString("url")
+                    if (url.isNotEmpty() && bitrate > highestBitrate) {
+                        highestBitrate = bitrate
+                        chosenUrl = url
+                    }
+                }
+            }
+            return chosenUrl
+        } catch (e: Exception) {
+            Log.w(tag, "ANDROID_VR audio resolution error for $videoId", e)
+            return null
+        }
+    }
+
     private fun resolveViaInvidious(videoId: String): String? {
         val instances = listOf("https://invidious.f5.si", "https://inv.vern.cc")
         for (instance in instances) {
@@ -324,87 +377,171 @@ class YouTubeStreamResolver(
         return null
     }
 
-    suspend fun resolveVideoStreamUrl(song: Song): String? = withContext(Dispatchers.IO) {
+    /**
+     * Resolves all available video resolutions (1080p, 720p, 480p, 360p, 240p)
+     * using the multi-client fallback pipeline (VISIONOS -> ANDROID_VR -> Invidious).
+     */
+    suspend fun resolveVideoQualities(song: Song): List<VideoQuality> = withContext(Dispatchers.IO) {
         val videoId = song.sourceId
-        val pair = resolveVideoAndAudioViaVisionOs(videoId)
-        if (pair != null) {
-            if (pair.second != null) {
-                song.streamUrl = pair.second
-            }
-            return@withContext pair.first
-        }
-        null
+        
+        // 1. Try VISIONOS
+        val visionQualities = extractQualitiesViaInnerTube(videoId, getVisionOsContext(cachedVisitorData), "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15", "101", "1.02")
+        if (visionQualities.isNotEmpty()) return@withContext visionQualities
+
+        // 2. Try ANDROID_VR
+        val vrQualities = extractQualitiesViaInnerTube(videoId, getAndroidVrContext(), "Mozilla/5.0 (Linux; Android 12; Quest 3) AppleWebKit/537.36")
+        if (vrQualities.isNotEmpty()) return@withContext vrQualities
+
+        // 3. Fallback to Invidious
+        val invidiousQualities = extractQualitiesViaInvidious(videoId)
+        if (invidiousQualities.isNotEmpty()) return@withContext invidiousQualities
+
+        emptyList()
     }
 
-    private fun resolveVideoAndAudioViaVisionOs(videoId: String): Pair<String, String?>? {
+    private fun extractQualitiesViaInnerTube(
+        videoId: String,
+        contextObj: JSONObject,
+        userAgent: String,
+        clientNameHeader: String? = null,
+        clientVersionHeader: String? = null
+    ): List<VideoQuality> {
         try {
-            if (cachedVisitorData == null) {
-                refreshVisitorData(videoId)
-            }
-
             val payload = JSONObject().apply {
-                put("context", getVisionOsContext(cachedVisitorData))
+                put("context", contextObj)
                 put("videoId", videoId)
                 put("playbackContext", JSONObject().apply {
                     put("contentPlaybackContext", JSONObject().apply {
                         put("html5Preference", "HTML5_PREF_WANTS")
-                        put("signatureTimestamp", cachedSts)
                     })
                 })
             }
 
             val reqBuilder = Request.Builder()
-                .url("$playerUrl?prettyPrint=false")
-                .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15")
+                .url(playerUrl)
+                .header("User-Agent", userAgent)
                 .header("Content-Type", "application/json")
-                .header("X-Youtube-Client-Name", "101")
-                .header("X-Youtube-Client-Version", "1.02")
                 .header("Origin", "https://www.youtube.com")
                 .post(payload.toString().toRequestBody(jsonMediaType))
 
-            cachedVisitorData?.let { reqBuilder.header("X-Goog-Visitor-Id", it) }
+            if (!clientNameHeader.isNullOrEmpty()) reqBuilder.header("X-Youtube-Client-Name", clientNameHeader)
+            if (!clientVersionHeader.isNullOrEmpty()) reqBuilder.header("X-Youtube-Client-Version", clientVersionHeader)
 
             val response = client.newCall(reqBuilder.build()).execute()
-            val body = response.body?.string() ?: return null
+            val body = response.body?.string() ?: return emptyList()
             val json = JSONObject(body)
 
-            val streamingData = json.optJSONObject("streamingData") ?: return null
-            val adaptiveFormats = streamingData.optJSONArray("adaptiveFormats") ?: return null
+            val streamingData = json.optJSONObject("streamingData") ?: return emptyList()
+            val adaptiveFormats = streamingData.optJSONArray("adaptiveFormats") ?: return emptyList()
 
-            var chosenVideoUrl: String? = null
-            var bestHeight = 0
-            var chosenAudioUrl: String? = null
+            var bestAudioUrl: String? = null
             var bestAudioBitrate = 0
 
+            // Find best audio URL first
+            for (i in 0 until adaptiveFormats.length()) {
+                val format = adaptiveFormats.optJSONObject(i) ?: continue
+                val mimeType = format.optString("mimeType")
+                val url = format.optString("url")
+                if (url.isNotEmpty() && mimeType.contains("audio/")) {
+                    val bitrate = format.optInt("bitrate", 0)
+                    if (bitrate > bestAudioBitrate) {
+                        bestAudioBitrate = bitrate
+                        bestAudioUrl = url
+                    }
+                }
+            }
+
+            // Extract distinct video resolutions
+            val qualityMap = mutableMapOf<Int, VideoQuality>()
             for (i in 0 until adaptiveFormats.length()) {
                 val format = adaptiveFormats.optJSONObject(i) ?: continue
                 val mimeType = format.optString("mimeType")
                 val url = format.optString("url")
                 if (url.isEmpty()) continue
 
-                if (mimeType.contains("video/mp4")) {
+                if (mimeType.contains("video/")) {
                     val height = format.optInt("height", 0)
-                    if (height > bestHeight && height <= 1080) {
-                        bestHeight = height
-                        chosenVideoUrl = url
-                    }
-                } else if (mimeType.contains("audio/")) {
-                    val bitrate = format.optInt("bitrate", 0)
-                    if (bitrate > bestAudioBitrate) {
-                        bestAudioBitrate = bitrate
-                        chosenAudioUrl = url
+                    val label = format.optString("qualityLabel").ifEmpty { "${height}p" }
+                    if (height in 144..1080 && !qualityMap.containsKey(height)) {
+                        qualityMap[height] = VideoQuality(
+                            label = label,
+                            height = height,
+                            videoUrl = url,
+                            audioUrl = bestAudioUrl
+                        )
                     }
                 }
             }
 
-            if (chosenVideoUrl != null) {
-                return Pair(chosenVideoUrl, chosenAudioUrl)
-            }
-            return null
+            return qualityMap.values.sortedByDescending { it.height }
         } catch (e: Exception) {
-            Log.w(tag, "VISIONOS video stream resolution error for $videoId", e)
-            return null
+            Log.w(tag, "Error extracting video qualities for $videoId", e)
+            return emptyList()
         }
+    }
+
+    private fun extractQualitiesViaInvidious(videoId: String): List<VideoQuality> {
+        val instances = listOf("https://invidious.f5.si", "https://inv.vern.cc")
+        for (instance in instances) {
+            try {
+                val request = Request.Builder()
+                    .url("$instance/api/v1/videos/$videoId")
+                    .header("User-Agent", "Mozilla/5.0")
+                    .build()
+                val response = client.newCall(request).execute()
+                val body = response.body?.string() ?: continue
+                val json = JSONObject(body)
+                val formats = json.optJSONArray("adaptiveFormats") ?: continue
+
+                var bestAudioUrl: String? = null
+                for (i in 0 until formats.length()) {
+                    val format = formats.optJSONObject(i) ?: continue
+                    val type = format.optString("type")
+                    val url = format.optString("url")
+                    if (url.isNotEmpty() && type.contains("audio/")) {
+                        bestAudioUrl = url
+                        break
+                    }
+                }
+
+                val qualityMap = mutableMapOf<Int, VideoQuality>()
+                for (i in 0 until formats.length()) {
+                    val format = formats.optJSONObject(i) ?: continue
+                    val type = format.optString("type")
+                    val url = format.optString("url")
+                    if (url.isNotEmpty() && type.contains("video/")) {
+                        val qualityLabel = format.optString("qualityLabel")
+                        val resolution = format.optString("resolution")
+                        val height = resolution.split("x").getOrNull(1)?.toIntOrNull()
+                            ?: qualityLabel.filter { it.isDigit() }.toIntOrNull() ?: 0
+                        if (height in 144..1080 && !qualityMap.containsKey(height)) {
+                            qualityMap[height] = VideoQuality(
+                                label = if (qualityLabel.isNotEmpty()) qualityLabel else "${height}p",
+                                height = height,
+                                videoUrl = url,
+                                audioUrl = bestAudioUrl
+                            )
+                        }
+                    }
+                }
+                if (qualityMap.isNotEmpty()) {
+                    return qualityMap.values.sortedByDescending { it.height }
+                }
+            } catch (_: Exception) {}
+        }
+        return emptyList()
+    }
+
+    suspend fun resolveVideoStreamUrl(song: Song): String? = withContext(Dispatchers.IO) {
+        val qualities = resolveVideoQualities(song)
+        if (qualities.isNotEmpty()) {
+            val chosen = qualities.first() // Best available quality (e.g. 1080p or 720p)
+            if (chosen.audioUrl != null) {
+                song.streamUrl = chosen.audioUrl
+            }
+            return@withContext chosen.videoUrl
+        }
+        null
     }
 
     private fun getWebContext(): JSONObject {
@@ -448,4 +585,26 @@ class YouTubeStreamResolver(
             })
         }
     }
+
+    private fun getAndroidVrContext(): JSONObject {
+        return JSONObject().apply {
+            put("client", JSONObject().apply {
+                put("clientName", "ANDROID_VR")
+                put("clientVersion", "1.61.48")
+                put("deviceMake", "Oculus")
+                put("deviceModel", "Quest 3")
+                put("osName", "Android")
+                put("osVersion", "12")
+                put("hl", "en")
+                put("gl", "US")
+            })
+        }
+    }
 }
+
+data class VideoQuality(
+    val label: String,
+    val height: Int,
+    val videoUrl: String,
+    val audioUrl: String?
+)

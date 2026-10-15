@@ -63,17 +63,19 @@ class PlaybackService : MediaSessionService() {
 
         val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs = */ 15_000,
+                /* minBufferMs = */ 10_000,
                 /* maxBufferMs = */ 50_000,
-                /* bufferForPlaybackMs = */ 600,
-                /* bufferForPlaybackAfterRebufferMs = */ 1_200
+                /* bufferForPlaybackMs = */ 400,
+                /* bufferForPlaybackAfterRebufferMs = */ 800
             )
-            .setBackBuffer(/* backBufferDurationMs = */ 30_000, /* retainBackBufferFromKeyframe = */ true)
+            .setBackBuffer(/* backBufferDurationMs = */ 60_000, /* retainBackBufferFromKeyframe = */ true)
+            .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
         player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
+            .setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .setHandleAudioBecomingNoisy(true) // Auto pause when unplugging headphones
             .setWakeMode(C.WAKE_MODE_NETWORK) // Keep CPU & Wifi active while streaming

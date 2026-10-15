@@ -44,12 +44,15 @@ fun LibraryScreen(
     var recentSongs by remember { mutableStateOf(libraryManager.getRecentlyPlayed()) }
     var blockedTitles by remember { mutableStateOf(libraryManager.getBlockedSongTitles()) }
     var blockedArtists by remember { mutableStateOf(libraryManager.getBlockedArtists()) }
+    var blockedKeywords by remember { mutableStateOf(libraryManager.getBlockedKeywords()) }
+    var showAddBlockDialog by remember { mutableStateOf(false) }
 
     fun refreshAll() {
         favorites = libraryManager.getFavorites()
         recentSongs = libraryManager.getRecentlyPlayed()
         blockedTitles = libraryManager.getBlockedSongTitles()
         blockedArtists = libraryManager.getBlockedArtists()
+        blockedKeywords = libraryManager.getBlockedKeywords()
     }
 
     Column(
@@ -202,14 +205,52 @@ fun LibraryScreen(
             }
 
             LibraryTab.BLOCKLIST -> {
+                if (showAddBlockDialog) {
+                    AddBlockItemDialog(
+                        onDismiss = { showAddBlockDialog = false },
+                        onAdd = { text, isArtist ->
+                            if (isArtist) {
+                                libraryManager.blockArtist(text)
+                            } else {
+                                libraryManager.blockKeyword(text)
+                            }
+                            refreshAll()
+                            showAddBlockDialog = false
+                        }
+                    )
+                }
+
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 90.dp)
                 ) {
                     item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Quản lý danh sách chặn",
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            FilledTonalButton(
+                                onClick = { showAddBlockDialog = true },
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Thêm thủ công", fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    item {
                         Text(
-                            text = "Nghệ sĩ bị chặn (${blockedArtists.size})",
+                            text = "Nghệ sĩ & Kênh bị chặn (${blockedArtists.size})",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.outline
@@ -245,9 +286,47 @@ fun LibraryScreen(
                     }
 
                     item {
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Bài hát bị chặn (${blockedTitles.size})",
+                            text = "Từ khóa & Tên bài hát chặn (${blockedKeywords.size})",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+
+                    if (blockedKeywords.isEmpty()) {
+                        item {
+                            Text("Không có từ khóa bài hát nào bị chặn", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                        }
+                    } else {
+                        item {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                blockedKeywords.forEach { keyword ->
+                                    InputChip(
+                                        selected = true,
+                                        onClick = {
+                                            libraryManager.unblockKeyword(keyword)
+                                            refreshAll()
+                                        },
+                                        label = { Text(keyword, fontSize = 12.sp) },
+                                        trailingIcon = {
+                                            Icon(Icons.Default.Close, contentDescription = "Bỏ chặn", modifier = Modifier.size(16.dp))
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Bài hát cụ thể đã chặn (${blockedTitles.size})",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.outline
@@ -256,7 +335,7 @@ fun LibraryScreen(
 
                     if (blockedTitles.isEmpty()) {
                         item {
-                            Text("Không có bài hát nào bị chặn", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                            Text("Không có bài hát nào bị chặn cụ thể", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
                         }
                     } else {
                         items(blockedTitles.entries.toList()) { (songId, title) ->
@@ -289,6 +368,79 @@ fun LibraryScreen(
             }
         }
     }
+}
+
+@Composable
+fun AddBlockItemDialog(
+    onDismiss: () -> Unit,
+    onAdd: (text: String, isArtist: Boolean) -> Unit
+) {
+    var blockText by remember { mutableStateOf("") }
+    var isArtistType by remember { mutableStateOf(true) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Thêm vào danh sách chặn", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Nhập tên nghệ sĩ/kênh hoặc tên bài hát/từ khóa muốn lọc hoàn toàn khỏi ứng dụng.",
+                    fontSize = 12.5.sp,
+                    color = MaterialTheme.colorScheme.outline
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = isArtistType,
+                        onClick = { isArtistType = true },
+                        label = { Text("Kênh / Nghệ sĩ", fontSize = 12.sp) }
+                    )
+                    FilterChip(
+                        selected = !isArtistType,
+                        onClick = { isArtistType = false },
+                        label = { Text("Tên bài / Từ khóa", fontSize = 12.sp) }
+                    )
+                }
+
+                OutlinedTextField(
+                    value = blockText,
+                    onValueChange = { blockText = it },
+                    placeholder = {
+                        Text(
+                            if (isArtistType) "VD: Tên nghệ sĩ hoặc Channel..." else "VD: Tên bài hát hoặc Từ khóa...",
+                            fontSize = 12.5.sp
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (blockText.isNotBlank()) {
+                        onAdd(blockText.trim(), isArtistType)
+                    }
+                },
+                enabled = blockText.isNotBlank(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Chặn")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Hủy")
+            }
+        }
+    )
 }
 
 @Composable

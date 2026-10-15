@@ -52,11 +52,13 @@ import com.litemusic.app.core.model.Song
 import com.litemusic.app.core.resolver.SoundCloudStreamResolver
 import com.litemusic.app.core.resolver.SpotifyMetadataBridge
 import com.litemusic.app.core.resolver.YouTubeStreamResolver
+import com.litemusic.app.core.resolver.VideoQuality
 import com.litemusic.app.core.library.LibraryManager
 import com.litemusic.app.ui.search.SearchScreen
 import com.litemusic.app.ui.library.LibraryScreen
 import com.litemusic.app.ui.settings.SettingsScreen
 import com.litemusic.app.ui.theme.*
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.viewinterop.AndroidView
@@ -77,8 +79,12 @@ import com.litemusic.app.feature.aimusic.ui.AiPlaylistPreviewDialog
 import com.litemusic.app.feature.aimusic.ui.AiSearchTile
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.ui.graphics.graphicsLayer
@@ -103,6 +109,8 @@ class MainActivity : ComponentActivity() {
     private var activeLyrics by mutableStateOf<List<LyricLine>>(emptyList())
     private var isResolvingStream by mutableStateOf(false)
     private var playJob: Job? = null
+    private var availableVideoQualities by mutableStateOf<List<VideoQuality>>(emptyList())
+    private var selectedVideoQuality by mutableStateOf<VideoQuality?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -178,7 +186,15 @@ class MainActivity : ComponentActivity() {
                     onPlaySong = { song, asVideo -> playSong(song, asVideo) },
                     onSearch = { query, source -> searchSongs(query, source) },
                     onSeek = { positionMs -> mediaController?.seekTo(positionMs) },
-                    currentSong = currentPlayingSong
+                    currentSong = currentPlayingSong,
+                    availableVideoQualities = availableVideoQualities,
+                    selectedVideoQuality = selectedVideoQuality,
+                    onChangeVideoQuality = { quality ->
+                        val target = currentPlayingSong
+                        if (target != null) {
+                            playSong(target, asVideo = true, explicitQuality = quality)
+                        }
+                    }
                 )
             }
         }
@@ -203,13 +219,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun playSong(song: Song, asVideo: Boolean = false) {
+    private fun playSong(song: Song, asVideo: Boolean = false, explicitQuality: VideoQuality? = null) {
         val controller = mediaController ?: return
 
         // Cancel any in-flight stream resolution to prevent race conditions & interleaving
         playJob?.cancel()
 
-        // Preserve current playback position if switching mode for the same song
+        // Preserve current playback position if switching mode or resolution for the same song
         val isSameSong = (currentPlayingSong?.id == song.id && controller.currentMediaItem != null)
         val curPos = if (isSameSong) controller.currentPosition else 0L
 
@@ -232,8 +248,24 @@ class MainActivity : ComponentActivity() {
 
             // Resolve real playable stream URL from YouTube Opus / Video MP4 / SoundCloud / Spotify Bridge
             val url = if (effectiveAsVideo) {
-                song.videoUrl ?: ytResolver.resolveVideoStreamUrl(song)?.also { song.videoUrl = it }
-                    ?: ytResolver.resolveStreamUrl(song)
+                if (explicitQuality != null) {
+                    selectedVideoQuality = explicitQuality
+                    song.videoUrl = explicitQuality.videoUrl
+                    if (explicitQuality.audioUrl != null) {
+                        song.streamUrl = explicitQuality.audioUrl
+                    }
+                    explicitQuality.videoUrl
+                } else {
+                    val qualities = ytResolver.resolveVideoQualities(song)
+                    availableVideoQualities = qualities
+                    val chosen = qualities.firstOrNull()
+                    selectedVideoQuality = chosen
+                    if (chosen?.audioUrl != null) {
+                        song.streamUrl = chosen.audioUrl
+                    }
+                    chosen?.videoUrl ?: (song.videoUrl ?: ytResolver.resolveVideoStreamUrl(song)?.also { song.videoUrl = it }
+                        ?: ytResolver.resolveStreamUrl(song))
+                }
             } else {
                 song.streamUrl ?: when (song.source) {
                     AudioSource.YOUTUBE_MUSIC, AudioSource.YOUTUBE_VIDEO -> ytResolver.resolveStreamUrl(song)?.also { song.streamUrl = it }
@@ -312,7 +344,10 @@ fun MainAppScreen(
     onDebugModeToggle: (Boolean) -> Unit = {},
     debugServerUrl: String = "http://localhost:8888",
     onCopyLogcat: () -> Unit = {},
-    onClearLogcat: () -> Unit = {}
+    onClearLogcat: () -> Unit = {},
+    availableVideoQualities: List<VideoQuality> = emptyList(),
+    selectedVideoQuality: VideoQuality? = null,
+    onChangeVideoQuality: (VideoQuality) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -375,7 +410,6 @@ fun MainAppScreen(
         currentTitle = song.title
         currentArtist = song.artist
         currentArtwork = song.thumbnailUrl
-        libraryManager.addToRecent(song)
 
         // Auto-queue related tracks if standalone track and queue is empty
         if (isAutoQueueRelated && songQueue.isEmpty()) {
@@ -450,7 +484,9 @@ fun MainAppScreen(
         }
     }
 
-    // Fetch initial live trending music on app start
+    var personalizedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+
+    // Fetch initial live trending music & generate personalized recommendations
     LaunchedEffect(Unit) {
         isLoadingHome = true
         val trending = onSearch("Top thịnh hành Việt Nam", AudioSource.YOUTUBE_MUSIC)
@@ -459,6 +495,17 @@ fun MainAppScreen(
             currentTitle = homeSongs.first().title
             currentArtist = homeSongs.first().artist
             currentArtwork = homeSongs.first().thumbnailUrl
+        }
+
+        val history = libraryManager.getRecentlyPlayed()
+        if (history.isNotEmpty() && homeSongs.isNotEmpty()) {
+            val related = LocalHeuristicRanker.recommendRelatedSongs(
+                baseSong = history.first(),
+                candidatePool = homeSongs,
+                targetCount = 8,
+                historySongs = history
+            )
+            personalizedSongs = libraryManager.filterBlocked(related).filterNot { it.id == history.first().id }
         }
         isLoadingHome = false
     }
@@ -546,14 +593,24 @@ fun MainAppScreen(
         onDispose { mediaController?.removeListener(listener) }
     }
 
-    // Progress Ticker
-    LaunchedEffect(isPlaying) {
+    // Progress Ticker & 20-second history verification
+    var accumulatedPlayMs by remember { mutableLongStateOf(0L) }
+    var recordedSongIdToHistory by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(isPlaying, activeSong?.id) {
+        accumulatedPlayMs = 0L
         while (isPlaying) {
             mediaController?.let {
                 currentPositionMs = it.currentPosition
                 if (it.duration > 0) durationMs = it.duration
             }
             delay(500)
+            accumulatedPlayMs += 500L
+            val cur = activeSong
+            if (cur != null && accumulatedPlayMs >= 20_000L && recordedSongIdToHistory != cur.id) {
+                recordedSongIdToHistory = cur.id
+                libraryManager.addToRecent(cur)
+            }
         }
     }
 
@@ -679,6 +736,31 @@ fun MainAppScreen(
                                     verticalArrangement = Arrangement.spacedBy(14.dp),
                                     contentPadding = PaddingValues(bottom = 90.dp)
                                 ) {
+                                    // Section 0: Personalized Recommendations (From >20s History)
+                                    if (personalizedSongs.isNotEmpty()) {
+                                        item {
+                                            Text(
+                                                text = "✨ Dành riêng cho bạn (Từ lịch sử xem)",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+
+                                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                items(personalizedSongs) { song ->
+                                                    val isSongActive = activeSong?.id == song.id
+                                                    AlbumGridCard(
+                                                        song = song,
+                                                        onClick = { playTrack(song) },
+                                                        isActive = isSongActive,
+                                                        isLoading = isSongActive && isAudioLoading
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     // Section 1: Quick Picks Grid
                                     item {
                                         Text(
@@ -1006,7 +1088,10 @@ fun MainAppScreen(
                     } else {
                         Toast.makeText(context, if (next) "Bật phát ngẫu nhiên" else "Tắt phát ngẫu nhiên", Toast.LENGTH_SHORT).show()
                     }
-                }
+                },
+                availableVideoQualities = availableVideoQualities,
+                selectedVideoQuality = selectedVideoQuality,
+                onChangeVideoQuality = onChangeVideoQuality
             )
         }
 
@@ -1576,12 +1661,28 @@ fun M3FullScreenPlayer(
     repeatMode: Int = 0,
     onToggleRepeat: () -> Unit = {},
     isShuffleEnabled: Boolean = false,
-    onToggleShuffle: () -> Unit = {}
+    onToggleShuffle: () -> Unit = {},
+    availableVideoQualities: List<VideoQuality> = emptyList(),
+    selectedVideoQuality: VideoQuality? = null,
+    onChangeVideoQuality: (VideoQuality) -> Unit = {}
 ) {
     var currentTab by remember { mutableStateOf(FullPlayerTab.NOW_PLAYING) }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showVolumeDialog by remember { mutableStateOf(false) }
     var showTimerDialog by remember { mutableStateOf(false) }
+    var showQualityDialog by remember { mutableStateOf(false) }
+
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    val animatedDragOffsetY by animateFloatAsState(
+        targetValue = dragOffsetY,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "dragDownOffsetY"
+    )
+
+    var isScrubbing by remember { mutableStateOf(false) }
+    var scrubPositionRatio by remember { mutableFloatStateOf(0f) }
+    val displayedRatio = if (isScrubbing) scrubPositionRatio else (if (durationMs > 0) (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f)
+    val displayedTimeMs = if (isScrubbing) (scrubPositionRatio * durationMs).toLong() else currentPositionMs
 
     val currentPosLatest by rememberUpdatedState(currentPositionMs)
     val durationLatest by rememberUpdatedState(durationMs)
@@ -1612,7 +1713,6 @@ fun M3FullScreenPlayer(
             pendingSeekTargetMs = -1L
         }
     }
-
 
     val lyricsListState = rememberLazyListState()
 
@@ -1655,15 +1755,60 @@ fun M3FullScreenPlayer(
         )
     }
 
+    if (showQualityDialog) {
+        VideoQualityDialog(
+            currentQuality = selectedVideoQuality,
+            availableQualities = availableVideoQualities,
+            onSelectQuality = { q -> onChangeVideoQuality(q) },
+            onDismiss = { showQualityDialog = false }
+        )
+    }
+
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .offset { IntOffset(0, animatedDragOffsetY.roundToInt()) }
+            .pointerInput(lyrics.size, currentTab) {
+                detectVerticalDragGestures(
+                    onDragEnd = {
+                        if (dragOffsetY > 160f) {
+                            onClose()
+                        }
+                        dragOffsetY = 0f
+                    },
+                    onDragCancel = {
+                        dragOffsetY = 0f
+                    },
+                    onVerticalDrag = { change, dragAmount ->
+                        change.consume()
+                        if (dragAmount > 0 || dragOffsetY > 0) {
+                            dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                        } else if (dragAmount < -25f && currentTab == FullPlayerTab.NOW_PLAYING) {
+                            if (lyrics.isNotEmpty()) {
+                                currentTab = FullPlayerTab.LYRICS
+                            } else {
+                                currentTab = FullPlayerTab.QUEUE
+                            }
+                        }
+                    }
+                )
+            },
         color = MaterialTheme.colorScheme.background
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Drag handle pill at top
+            Box(
+                modifier = Modifier
+                    .width(36.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.outlineVariant)
+            )
+
             // Top Bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1676,37 +1821,62 @@ fun M3FullScreenPlayer(
 
                 // Video vs Only Nhạc switch pill for YouTube sources
                 if (currentSong?.source == AudioSource.YOUTUBE_VIDEO || currentSong?.source == AudioSource.YOUTUBE_MUSIC) {
-                    Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                    ) {
-                        Row(modifier = Modifier.padding(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = if (!isVideoMode) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                modifier = Modifier.clickable { onToggleVideoMode(false) }
-                            ) {
-                                Text(
-                                    text = "🎵 Only Nhạc",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (!isVideoMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Row(modifier = Modifier.padding(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = if (!isVideoMode) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                    modifier = Modifier.clickable { onToggleVideoMode(false) }
+                                ) {
+                                    Text(
+                                        text = "🎵 Only Nhạc",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (!isVideoMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = if (isVideoMode) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                    modifier = Modifier.clickable { onToggleVideoMode(true) }
+                                ) {
+                                    Text(
+                                        text = "🎬 Video",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isVideoMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
                             }
+                        }
+
+                        if (isVideoMode) {
                             Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = if (isVideoMode) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                modifier = Modifier.clickable { onToggleVideoMode(true) }
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                modifier = Modifier.clickable { showQualityDialog = true }
                             ) {
-                                Text(
-                                    text = "🎬 Video",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isVideoMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.HighQuality, contentDescription = "Chất lượng", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Text(
+                                        text = selectedVideoQuality?.label ?: "Auto",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
                             }
                         }
                     }
@@ -1746,15 +1916,17 @@ fun M3FullScreenPlayer(
                         }
                     }
 
-                    // Lyrics Button
-                    IconButton(onClick = {
-                        currentTab = if (currentTab == FullPlayerTab.LYRICS) FullPlayerTab.NOW_PLAYING else FullPlayerTab.LYRICS
-                    }) {
-                        Icon(
-                            imageVector = if (currentTab == FullPlayerTab.LYRICS) Icons.Default.MusicNote else Icons.Default.Lyrics,
-                            contentDescription = "Toggle Lyrics",
-                            tint = if (currentTab == FullPlayerTab.LYRICS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
+                    // Lyrics Button (hidden if no lyrics)
+                    if (lyrics.isNotEmpty()) {
+                        IconButton(onClick = {
+                            currentTab = if (currentTab == FullPlayerTab.LYRICS) FullPlayerTab.NOW_PLAYING else FullPlayerTab.LYRICS
+                        }) {
+                            Icon(
+                                imageVector = if (currentTab == FullPlayerTab.LYRICS) Icons.Default.MusicNote else Icons.Default.Lyrics,
+                                contentDescription = "Toggle Lyrics",
+                                tint = if (currentTab == FullPlayerTab.LYRICS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }
@@ -2201,12 +2373,42 @@ fun M3FullScreenPlayer(
                 }
             }
 
-            // Scrubber Slider
-            Column(modifier = Modifier.fillMaxWidth()) {
+            // Scrubber Slider with seeking animation & preview tooltip
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Animated Seek Preview Bubble
+                AnimatedVisibility(
+                    visible = isScrubbing,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    ) {
+                        Text(
+                            text = "Tua đến: ${formatTime(displayedTimeMs)}",
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.5.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
                 Slider(
-                    value = progress,
+                    value = displayedRatio,
                     onValueChange = { newRatio ->
-                        onSeek((newRatio * durationMs).toLong())
+                        isScrubbing = true
+                        scrubPositionRatio = newRatio
+                    },
+                    onValueChangeFinished = {
+                        isScrubbing = false
+                        val targetMs = (scrubPositionRatio * durationMs).toLong()
+                        onSeek(targetMs)
                     },
                     colors = SliderDefaults.colors(
                         thumbColor = MaterialTheme.colorScheme.primary,
@@ -2215,7 +2417,7 @@ fun M3FullScreenPlayer(
                     )
                 )
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(formatTime(currentPositionMs), fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                    Text(formatTime(displayedTimeMs), fontSize = 11.sp, color = if (isScrubbing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, fontWeight = if (isScrubbing) FontWeight.Bold else FontWeight.Normal)
                     Text(formatTime(durationMs), fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
                 }
             }
@@ -2270,7 +2472,7 @@ fun M3FullScreenPlayer(
                     .fillMaxWidth()
                     .clickable {
                         currentTab = when (currentTab) {
-                            FullPlayerTab.NOW_PLAYING -> FullPlayerTab.LYRICS
+                            FullPlayerTab.NOW_PLAYING -> if (lyrics.isNotEmpty()) FullPlayerTab.LYRICS else FullPlayerTab.QUEUE
                             FullPlayerTab.LYRICS -> FullPlayerTab.QUEUE
                             FullPlayerTab.QUEUE -> FullPlayerTab.NOW_PLAYING
                         }
@@ -2282,7 +2484,7 @@ fun M3FullScreenPlayer(
                     Column {
                         Text(
                             text = when (currentTab) {
-                                FullPlayerTab.NOW_PLAYING -> "Chạm để xem Lời bài hát & Danh sách chờ"
+                                FullPlayerTab.NOW_PLAYING -> if (lyrics.isNotEmpty()) "Chạm để xem Lời bài hát & Danh sách chờ" else "Chạm để mở Danh sách chờ"
                                 FullPlayerTab.LYRICS -> "Chạm để mở Danh sách chờ (${songQueue.size} bài)"
                                 FullPlayerTab.QUEUE -> "Chạm để quay lại giao diện Đang phát"
                             },
@@ -2302,7 +2504,9 @@ fun M3FullScreenPlayer(
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Lyrics, contentDescription = null, tint = if (currentTab == FullPlayerTab.LYRICS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
+                        if (lyrics.isNotEmpty()) {
+                            Icon(Icons.Default.Lyrics, contentDescription = null, tint = if (currentTab == FullPlayerTab.LYRICS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
+                        }
                         Icon(Icons.Default.QueueMusic, contentDescription = null, tint = if (currentTab == FullPlayerTab.QUEUE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
                     }
                 }
@@ -2571,3 +2775,84 @@ private fun formatTime(millis: Long): String {
     val seconds = totalSeconds % 60
     return String.format("%02d:%02d", minutes, seconds)
 }
+
+@Composable
+fun VideoQualityDialog(
+    currentQuality: VideoQuality?,
+    availableQualities: List<VideoQuality>,
+    onSelectQuality: (VideoQuality) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Đóng", fontWeight = FontWeight.Bold) }
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.HighQuality, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text("Chất lượng video", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Chọn độ phân giải video mong muốn:",
+                    fontSize = 12.5.sp,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                if (availableQualities.isEmpty()) {
+                    Text(
+                        text = "Không có độ phân giải thay thế hoặc đang dùng nguồn mặc định.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(availableQualities) { quality ->
+                            val isSelected = currentQuality?.label == quality.label
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onSelectQuality(quality)
+                                        onDismiss()
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                                        .fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = quality.label,
+                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 14.sp
+                                    )
+                                    if (isSelected) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            contentDescription = "Selected",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+

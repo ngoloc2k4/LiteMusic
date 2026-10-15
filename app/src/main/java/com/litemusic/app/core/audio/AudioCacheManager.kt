@@ -6,6 +6,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.CacheKeyFactory
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -101,9 +102,23 @@ object AudioCacheManager {
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 
         val cache = getCache(context)
+        val customKeyFactory = CacheKeyFactory { dataSpec ->
+            val uri = dataSpec.uri
+            val uriStr = uri.toString()
+            if (uriStr.contains("googlevideo.com") || uriStr.contains("youtube.com")) {
+                val id = uri.getQueryParameter("id") ?: uri.getQueryParameter("docid")
+                val itag = uri.getQueryParameter("itag")
+                if (!id.isNullOrEmpty()) {
+                    return@CacheKeyFactory if (!itag.isNullOrEmpty()) "yt_${id}_$itag" else "yt_$id"
+                }
+            }
+            dataSpec.key ?: dataSpec.uri.toString()
+        }
+
         return CacheDataSource.Factory()
             .setCache(cache)
             .setUpstreamDataSourceFactory(upstreamFactory)
+            .setCacheKeyFactory(customKeyFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
     }
 }

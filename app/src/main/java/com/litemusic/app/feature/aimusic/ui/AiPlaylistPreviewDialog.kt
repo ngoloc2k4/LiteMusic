@@ -33,6 +33,7 @@ fun AiPlaylistPreviewDialog(
     onDismiss: () -> Unit,
     onPlayNow: (List<Song>) -> Unit,
     onAddToQueue: (List<Song>) -> Unit,
+    onPlaySingleTrack: ((Song, List<Song>) -> Unit)? = null,
     onFallbackLocal: () -> Unit = {}
 ) {
     Dialog(
@@ -41,20 +42,19 @@ fun AiPlaylistPreviewDialog(
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.94f)
-                .fillMaxHeight(0.85f),
+                .fillMaxWidth(0.96f)
+                .fillMaxHeight(0.92f),
             shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp,
-            border = BorderStroke(1.2.dp, Color(0xFFA855F7).copy(alpha = 0.4f))
+            border = BorderStroke(1.2.dp, Color(0xFFA855F7).copy(alpha = 0.35f))
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.SpaceBetween
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
-                // Dialog Header
+                // Dialog Header Bar
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -66,18 +66,18 @@ fun AiPlaylistPreviewDialog(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(28.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(
                                     Brush.linearGradient(listOf(Color(0xFFA855F7), Color(0xFF3B82F6)))
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                         }
                         Text(
-                            text = "AI Playlist Curator",
-                            fontSize = 17.sp,
+                            text = "YouTube Music Playlist Curator",
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -87,7 +87,7 @@ fun AiPlaylistPreviewDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Body content based on state
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -99,7 +99,29 @@ fun AiPlaylistPreviewDialog(
                         }
 
                         is AiGenerationState.Success -> {
-                            PlaylistSuccessView(state)
+                            PlaylistSuccessView(
+                                state = state,
+                                onPlayAll = { tracks ->
+                                    onPlayNow(tracks)
+                                    onDismiss()
+                                },
+                                onShufflePlay = { tracks ->
+                                    onPlayNow(tracks.shuffled())
+                                    onDismiss()
+                                },
+                                onAddToQueue = { tracks ->
+                                    onAddToQueue(tracks)
+                                    onDismiss()
+                                },
+                                onPlaySingleTrack = { clickedSong, trackList ->
+                                    if (onPlaySingleTrack != null) {
+                                        onPlaySingleTrack(clickedSong, trackList)
+                                    } else {
+                                        onPlayNow(listOf(clickedSong) + trackList.filterNot { it.id == clickedSong.id })
+                                    }
+                                    onDismiss()
+                                }
+                            )
                         }
 
                         is AiGenerationState.Error -> {
@@ -126,42 +148,6 @@ fun AiPlaylistPreviewDialog(
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 CircularProgressIndicator(color = Color(0xFFA855F7))
                             }
-                        }
-                    }
-                }
-
-                // Bottom Action buttons
-                if (state is AiGenerationState.Success) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                onAddToQueue(state.tracks)
-                                onDismiss()
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Icon(Icons.Default.QueueMusic, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("+ Queue", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = {
-                                onPlayNow(state.tracks)
-                                onDismiss()
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                        ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("▶ Phát ngay", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -251,95 +237,226 @@ private fun StepItem(
 }
 
 @Composable
-private fun PlaylistSuccessView(state: AiGenerationState.Success) {
+private fun PlaylistSuccessView(
+    state: AiGenerationState.Success,
+    onPlayAll: (List<Song>) -> Unit,
+    onShufflePlay: (List<Song>) -> Unit,
+    onAddToQueue: (List<Song>) -> Unit,
+    onPlaySingleTrack: (Song, List<Song>) -> Unit
+) {
+    val firstArtwork = state.tracks.firstOrNull { it.thumbnailUrl.isNotEmpty() }?.thumbnailUrl ?: ""
+
     Column(modifier = Modifier.fillMaxSize()) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            // YouTube Music Playlist Hero Header
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // Hero Artwork with ambient shadow
+                    Box(
+                        modifier = Modifier
+                            .size(136.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (firstArtwork.isNotEmpty()) {
+                            AsyncImage(
+                                model = firstArtwork,
+                                contentDescription = state.playlistTitle,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(Color(0xFFA855F7), Color(0xFF3B82F6))
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White, modifier = Modifier.size(54.dp))
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Playlist Title
                     Text(
                         text = state.playlistTitle,
-                        fontSize = 15.sp,
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 12.dp)
                     )
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFFA855F7).copy(alpha = 0.2f)
-                    ) {
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Metadata Subtitle
+                    Text(
+                        text = "LiteMusic • ${state.tracks.size} bài hát • Giám tuyển AI",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    if (state.playlistDescription.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "${state.tracks.size} bài",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFC084FC),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            text = state.playlistDescription,
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.outline,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = state.playlistDescription,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.outline
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Người giám tuyển: ${state.providerUsed}",
-                    fontSize = 10.5.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
 
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(
-            text = "Danh sách bài hát (${state.tracks.size})",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.outline
-        )
-        Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-        LazyColumn(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            itemsIndexed(state.tracks) { index, song ->
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                    // YouTube Music Action Pill Buttons
                     Row(
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("${index + 1}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.outline, modifier = Modifier.width(20.dp))
+                        // Play All Button
+                        Button(
+                            onClick = { onPlayAll(state.tracks) },
+                            shape = RoundedCornerShape(22.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Phát tất cả", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // Shuffle Button
+                        OutlinedButton(
+                            onClick = { onShufflePlay(state.tracks) },
+                            shape = RoundedCornerShape(22.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Shuffle, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Trộn bài", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // Add to Queue Button
+                        FilledTonalButton(
+                            onClick = { onAddToQueue(state.tracks) },
+                            shape = RoundedCornerShape(22.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Default.QueueMusic, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("+ Queue", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                }
+            }
+
+            // Section Header
+            item {
+                Text(
+                    text = "DANH SÁCH BÀI HÁT (${state.tracks.size})",
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.outline,
+                    letterSpacing = 0.8.sp,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+                )
+            }
+
+            // Track Items
+            itemsIndexed(state.tracks) { index, song ->
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onPlaySingleTrack(song, state.tracks) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${index + 1}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.width(24.dp)
+                        )
+
                         if (song.thumbnailUrl.isNotEmpty()) {
                             AsyncImage(
                                 model = song.thumbnailUrl,
                                 contentDescription = song.title,
-                                modifier = Modifier.size(36.dp).clip(RoundedCornerShape(6.dp)),
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(8.dp)),
                                 contentScale = ContentScale.Crop
                             )
                         } else {
-                            Box(modifier = Modifier.size(36.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
-                                Text("♫", color = MaterialTheme.colorScheme.onPrimary, fontSize = 14.sp)
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("♫", color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
                             }
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(song.title, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${song.artist} • ${song.source.name.replace("_", " ")}", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.outline, maxLines = 1)
+                            Text(
+                                text = song.title,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "${song.artist} • ${song.source.name.replace("_", " ")}",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.outline,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { onPlaySingleTrack(song, state.tracks) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = "Phát bài này",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }

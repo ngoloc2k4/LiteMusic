@@ -9,8 +9,17 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -362,6 +371,43 @@ fun MainAppScreen(
     var isLoadingHome by remember { mutableStateOf(true) }
     var isSearching by remember { mutableStateOf(false) }
 
+    // Homepage Reload & Pull-to-Refresh State
+    var refreshHomeTrigger by remember { mutableIntStateOf(0) }
+    val homeLazyListState = rememberLazyListState()
+    var homePullOffset by remember { mutableFloatStateOf(0f) }
+    val homePullThreshold = 130f
+
+    val homePullRefreshConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (homePullOffset > 0 && available.y < 0) {
+                    val newOffset = (homePullOffset + available.y).coerceAtLeast(0f)
+                    val consumed = newOffset - homePullOffset
+                    homePullOffset = newOffset
+                    return Offset(0f, consumed)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (available.y > 0 && homeLazyListState.firstVisibleItemIndex == 0 && homeLazyListState.firstVisibleItemScrollOffset == 0) {
+                    homePullOffset = (homePullOffset + available.y * 0.45f).coerceAtMost(220f)
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (homePullOffset >= homePullThreshold) {
+                    refreshHomeTrigger++
+                    Toast.makeText(context, "Đang làm mới trang chủ...", Toast.LENGTH_SHORT).show()
+                }
+                homePullOffset = 0f
+                return Velocity.Zero
+            }
+        }
+    }
+
     // Playback state
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
@@ -487,7 +533,7 @@ fun MainAppScreen(
     var personalizedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
 
     // Fetch initial live trending music & generate personalized recommendations
-    LaunchedEffect(Unit) {
+    LaunchedEffect(refreshHomeTrigger) {
         isLoadingHome = true
         val trending = onSearch("Top thịnh hành Việt Nam", AudioSource.YOUTUBE_MUSIC)
         homeSongs = libraryManager.filterBlocked(trending)
@@ -654,7 +700,17 @@ fun MainAppScreen(
                     items.forEachIndexed { index, (label, icon) ->
                         NavigationBarItem(
                             selected = selectedNavTab == index,
-                            onClick = { selectedNavTab = index },
+                            onClick = {
+                                if (selectedNavTab == 0 && index == 0) {
+                                    coroutineScope.launch {
+                                        homeLazyListState.animateScrollToItem(0)
+                                    }
+                                    refreshHomeTrigger++
+                                    Toast.makeText(context, "Đang làm mới trang chủ...", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    selectedNavTab = index
+                                }
+                            },
                             icon = { Icon(icon, contentDescription = label) },
                             label = { Text(label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                             colors = NavigationBarItemDefaults.colors(
@@ -675,68 +731,110 @@ fun MainAppScreen(
                 when (selectedNavTab) {
                     0 -> {
                         // Tab 0: Khám phá (Discover / Home)
-                        Column(
+                        Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 16.dp)
+                                .nestedScroll(homePullRefreshConnection)
                         ) {
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            // Top Bar
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp)
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // Top Bar
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(MaterialTheme.colorScheme.primaryContainer),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("♫", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                        }
+                                        Text(
+                                            text = "LiteMusic",
+                                            fontSize = 22.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                    ) {
+                                        Text(
+                                            text = if (isDspEnabled) "⚡ -14 LUFS DSP" else "⚡ DSP OFF",
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isDspEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                // Pull-to-refresh floating indicator pill
+                                AnimatedVisibility(
+                                    visible = homePullOffset > 15f || (isLoadingHome && homeSongs.isNotEmpty()),
+                                    enter = fadeIn() + expandVertically(),
+                                    exit = fadeOut() + shrinkVertically()
+                                ) {
                                     Box(
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(MaterialTheme.colorScheme.primaryContainer),
+                                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text("♫", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                                    }
-                                    Text(
-                                        text = "LiteMusic",
-                                        fontSize = 22.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-
-                                Surface(
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                                ) {
-                                    Text(
-                                        text = if (isDspEnabled) "⚡ -14 LUFS DSP" else "⚡ DSP OFF",
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isDspEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(14.dp))
-
-                            if (isLoadingHome) {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                                        Spacer(modifier = Modifier.height(10.dp))
-                                        Text("Đang tải dữ liệu thực từ YouTube Music...", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                                        Surface(
+                                            shape = RoundedCornerShape(20.dp),
+                                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+                                            shadowElevation = 4.dp
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                if (isLoadingHome) {
+                                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+                                                    Text("Đang tải lại trang chủ...", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                } else if (homePullOffset >= homePullThreshold) {
+                                                    Icon(Icons.Default.ArrowDownward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                                    Text("Thả tay để tải lại", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                } else {
+                                                    Icon(Icons.Default.ArrowDownward, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
+                                                    Text("Kéo xuống để làm mới", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.outline)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                            } else {
-                                LazyColumn(
-                                    modifier = Modifier.fillMaxSize(),
-                                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                                    contentPadding = PaddingValues(bottom = 90.dp)
-                                ) {
+
+                                if (isLoadingHome && homeSongs.isEmpty()) {
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                                            Spacer(modifier = Modifier.height(10.dp))
+                                            Text("Đang tải dữ liệu thực từ YouTube Music...", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                                        }
+                                    }
+                                } else {
+                                    LazyColumn(
+                                        state = homeLazyListState,
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                                        contentPadding = PaddingValues(bottom = 90.dp)
+                                    ) {
                                     // Section 0: Personalized Recommendations (From >20s History)
                                     if (personalizedSongs.isNotEmpty()) {
                                         item {
@@ -858,6 +956,7 @@ fun MainAppScreen(
                             }
                         }
                     }
+                }
                     1 -> {
                         // Tab 1: Tìm kiếm (Dedicated SearchScreen)
                         SearchScreen(
@@ -1145,6 +1244,10 @@ fun MainAppScreen(
                 onAddToQueue = { tracks ->
                     songQueue = songQueue + tracks
                     Toast.makeText(context, "Đã thêm ${tracks.size} bài vào danh sách chờ", Toast.LENGTH_SHORT).show()
+                },
+                onPlaySingleTrack = { clickedSong, trackList ->
+                    songQueue = trackList.filterNot { it.id == clickedSong.id }
+                    playTrack(clickedSong, isVideoMode)
                 },
                 onFallbackLocal = {
                     coroutineScope.launch {
@@ -1801,15 +1904,40 @@ fun M3FullScreenPlayer(
         )
     }
 
+    // Hierarchical back handling: if in Lyrics or Queue, back returns to Now Playing; if in Now Playing, back minimizes to MiniPlayer
+    BackHandler(enabled = currentTab != FullPlayerTab.NOW_PLAYING) {
+        currentTab = FullPlayerTab.NOW_PLAYING
+    }
+
+    val playerSheetNestedScrollConnection = remember(currentTab) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                if (available.y > 15f && currentTab != FullPlayerTab.NOW_PLAYING) {
+                    currentTab = FullPlayerTab.NOW_PLAYING
+                    return available
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxSize()
-            .offset { IntOffset(0, animatedDragOffsetY.roundToInt()) }
+            .offset { IntOffset(0, if (currentTab == FullPlayerTab.NOW_PLAYING) animatedDragOffsetY.roundToInt() else 0) }
             .pointerInput(lyrics.size, currentTab) {
                 detectVerticalDragGestures(
                     onDragEnd = {
-                        if (dragOffsetY > 160f) {
-                            onClose()
+                        if (dragOffsetY > 130f) {
+                            if (currentTab != FullPlayerTab.NOW_PLAYING) {
+                                currentTab = FullPlayerTab.NOW_PLAYING
+                            } else {
+                                onClose()
+                            }
                         }
                         dragOffsetY = 0f
                     },
@@ -1818,12 +1946,26 @@ fun M3FullScreenPlayer(
                     },
                     onVerticalDrag = { change, dragAmount ->
                         change.consume()
-                        if (dragAmount > 0 || dragOffsetY > 0) {
-                            dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
-                        } else if (dragAmount < -25f && currentTab == FullPlayerTab.NOW_PLAYING) {
-                            if (lyrics.isNotEmpty()) {
-                                currentTab = FullPlayerTab.LYRICS
+                        if (dragAmount > 0) {
+                            // Dragging DOWN
+                            if (currentTab != FullPlayerTab.NOW_PLAYING) {
+                                dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                                if (dragOffsetY > 80f) {
+                                    currentTab = FullPlayerTab.NOW_PLAYING
+                                    dragOffsetY = 0f
+                                }
                             } else {
+                                dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                            }
+                        } else if (dragAmount < -25f) {
+                            // Dragging UP
+                            if (currentTab == FullPlayerTab.NOW_PLAYING) {
+                                if (lyrics.isNotEmpty()) {
+                                    currentTab = FullPlayerTab.LYRICS
+                                } else {
+                                    currentTab = FullPlayerTab.QUEUE
+                                }
+                            } else if (currentTab == FullPlayerTab.LYRICS) {
                                 currentTab = FullPlayerTab.QUEUE
                             }
                         }
@@ -1840,11 +1982,21 @@ fun M3FullScreenPlayer(
             // Drag handle pill at top
             Box(
                 modifier = Modifier
-                    .width(36.dp)
-                    .height(4.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.outlineVariant)
-            )
+                    .fillMaxWidth()
+                    .clickable(enabled = currentTab != FullPlayerTab.NOW_PLAYING) {
+                        currentTab = FullPlayerTab.NOW_PLAYING
+                    }
+                    .padding(vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(36.dp)
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.outlineVariant)
+                )
+            }
 
             // Top Bar
             Row(
@@ -1852,7 +2004,13 @@ fun M3FullScreenPlayer(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onClose) {
+                IconButton(onClick = {
+                    if (currentTab != FullPlayerTab.NOW_PLAYING) {
+                        currentTab = FullPlayerTab.NOW_PLAYING
+                    } else {
+                        onClose()
+                    }
+                }) {
                     Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurface)
                 }
 
@@ -1982,6 +2140,7 @@ fun M3FullScreenPlayer(
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .nestedScroll(playerSheetNestedScrollConnection)
                                 .padding(vertical = 4.dp)
                         ) {
                             // Section 1: Đang phát hiện tại
@@ -2184,7 +2343,9 @@ fun M3FullScreenPlayer(
                         } else {
                             LazyColumn(
                                 state = lyricsListState,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .nestedScroll(playerSheetNestedScrollConnection),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(16.dp),
                                 contentPadding = PaddingValues(vertical = 40.dp)

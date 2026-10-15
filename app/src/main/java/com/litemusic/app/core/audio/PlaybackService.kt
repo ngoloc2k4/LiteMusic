@@ -27,10 +27,53 @@ class PlaybackService : MediaSessionService() {
             .build()
 
         val cacheDataSourceFactory = AudioCacheManager.buildCacheDataSourceFactory(this)
-        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory)
+        val defaultMediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory)
+        val mediaSourceFactory = object : androidx.media3.exoplayer.source.MediaSource.Factory {
+            override fun setDrmSessionManagerProvider(drmSessionManagerProvider: androidx.media3.exoplayer.drm.DrmSessionManagerProvider): androidx.media3.exoplayer.source.MediaSource.Factory {
+                defaultMediaSourceFactory.setDrmSessionManagerProvider(drmSessionManagerProvider)
+                return this
+            }
+            override fun setLoadErrorHandlingPolicy(loadErrorHandlingPolicy: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy): androidx.media3.exoplayer.source.MediaSource.Factory {
+                defaultMediaSourceFactory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+                return this
+            }
+            override fun getSupportedTypes(): IntArray {
+                return defaultMediaSourceFactory.supportedTypes
+            }
+            override fun createMediaSource(mediaItem: MediaItem): androidx.media3.exoplayer.source.MediaSource {
+                val audioUrl = mediaItem.mediaMetadata.extras?.getString("audioUrl")
+                val mainSource = defaultMediaSourceFactory.createMediaSource(mediaItem)
+                val mainUri = mediaItem.requestMetadata.mediaUri?.toString() 
+                    ?: mediaItem.localConfiguration?.uri?.toString()
+                if (!audioUrl.isNullOrEmpty() && audioUrl != mainUri) {
+                    val audioMediaItem = MediaItem.Builder()
+                        .setUri(audioUrl)
+                        .build()
+                    val audioSource = defaultMediaSourceFactory.createMediaSource(audioMediaItem)
+                    return androidx.media3.exoplayer.source.MergingMediaSource(
+                        /* adjustPeriodTimeOffsets = */ true,
+                        /* clipDurations = */ true,
+                        mainSource,
+                        audioSource
+                    )
+                }
+                return mainSource
+            }
+        }
+
+        val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs = */ 15_000,
+                /* maxBufferMs = */ 50_000,
+                /* bufferForPlaybackMs = */ 600,
+                /* bufferForPlaybackAfterRebufferMs = */ 1_200
+            )
+            .setBackBuffer(/* backBufferDurationMs = */ 30_000, /* retainBackBufferFromKeyframe = */ true)
+            .build()
 
         player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)
+            .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .setHandleAudioBecomingNoisy(true) // Auto pause when unplugging headphones
             .setWakeMode(C.WAKE_MODE_NETWORK) // Keep CPU & Wifi active while streaming

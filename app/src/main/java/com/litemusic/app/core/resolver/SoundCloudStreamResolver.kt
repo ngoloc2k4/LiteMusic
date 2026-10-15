@@ -79,29 +79,33 @@ class SoundCloudStreamResolver(
                     // Prioritize progressive streams over HLS for faster and more reliable playback
                     val media = item.optJSONObject("media")
                     val transcodings = media?.optJSONArray("transcodings")
-                    var streamApiUrl: String? = null
+                    val candidateUrls = mutableListOf<String>()
 
                     if (transcodings != null) {
                         // First pass: progressive protocol
                         for (j in 0 until transcodings.length()) {
                             val trans = transcodings.optJSONObject(j) ?: continue
                             val format = trans.optJSONObject("format")?.optString("protocol")
-                            if (format == "progressive") {
-                                streamApiUrl = trans.optString("url")
-                                break
+                            val u = trans.optString("url")
+                            if (format == "progressive" && u.isNotEmpty()) {
+                                candidateUrls.add(u)
                             }
                         }
-                        // Second pass: fallback to hls if no progressive
-                        if (streamApiUrl == null) {
-                            for (j in 0 until transcodings.length()) {
-                                val trans = transcodings.optJSONObject(j) ?: continue
-                                val format = trans.optJSONObject("format")?.optString("protocol")
-                                if (format == "hls") {
-                                    streamApiUrl = trans.optString("url")
-                                    break
-                                }
+                        // Second pass: hls protocol
+                        for (j in 0 until transcodings.length()) {
+                            val trans = transcodings.optJSONObject(j) ?: continue
+                            val format = trans.optJSONObject("format")?.optString("protocol")
+                            val u = trans.optString("url")
+                            if (format == "hls" && u.isNotEmpty() && !candidateUrls.contains(u)) {
+                                candidateUrls.add(u)
                             }
                         }
+                    }
+
+                    val sourceIdentifier = if (candidateUrls.isNotEmpty()) {
+                        candidateUrls.joinToString("|")
+                    } else {
+                        id
                     }
 
                     results.add(
@@ -112,7 +116,7 @@ class SoundCloudStreamResolver(
                             durationSeconds = duration,
                             thumbnailUrl = artworkUrl,
                             source = AudioSource.SOUNDCLOUD,
-                            sourceId = streamApiUrl ?: id
+                            sourceId = sourceIdentifier
                         )
                     )
                 }
@@ -127,35 +131,93 @@ class SoundCloudStreamResolver(
     }
 
     override suspend fun resolveStreamUrl(song: Song): String? = withContext(Dispatchers.IO) {
-        val streamApiUrl = song.sourceId
-        if (!streamApiUrl.startsWith("http")) return@withContext null
+        val rawSourceId = song.sourceId
+        val candidates = if (rawSourceId.contains("http")) {
+            rawSourceId.split("|").filter { it.startsWith("http") }
+        } else {
+            emptyList()
+        }
 
-        for (attempt in clientIds.indices) {
-            val cId = getClientId()
-            try {
-                val url = "$streamApiUrl?client_id=$cId"
-                val request = Request.Builder()
-                    .url(url)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                    .build()
+        // Try direct transcodings first
+        for (candidateUrl in candidates) {
+            for (attempt in 0 until 2) {
+                val cId = getClientId()
+                try {
+                    val delimiter = if (candidateUrl.contains("?")) "&" else "?"
+                    val url = "$candidateUrl${delimiter}client_id=$cId"
+                    val request = Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                        .build()
 
-                val response = client.newCall(request).execute()
-                if (response.code == 401 || response.code == 403) {
+                    val response = client.newCall(request).execute()
+                    if (response.code == 401 || response.code == 403) {
+                        rotateClientId()
+                        continue
+                    }
+
+                    val body = response.body?.string() ?: continue
+                    val json = JSONObject(body)
+                    val directUrl = json.optString("url", null)
+                    if (!directUrl.isNullOrEmpty()) {
+                        Log.i(tag, "Resolved SoundCloud stream for ${song.title} via $candidateUrl")
+                        return@withContext directUrl
+                    }
+                } catch (e: Exception) {
+                    Log.w(tag, "Error resolving SoundCloud transcode $candidateUrl", e)
                     rotateClientId()
-                    continue
                 }
-
-                val body = response.body?.string() ?: continue
-                val json = JSONObject(body)
-                val directUrl = json.optString("url", null)
-                if (!directUrl.isNullOrEmpty()) {
-                    return@withContext directUrl
-                }
-            } catch (e: Exception) {
-                Log.e(tag, "Error resolving SoundCloud stream (attempt $attempt) for: ${song.title}", e)
-                rotateClientId()
             }
         }
+
+        // Fallback: If candidates failed or rawSourceId is a track ID (sc_123 or 123)
+        val numericTrackId = song.id.removePrefix("sc_").ifEmpty { rawSourceId }
+        if (numericTrackId.all { it.isDigit() }) {
+            for (attempt in clientIds.indices) {
+                val cId = getClientId()
+                try {
+                    val trackUrl = "https://api-v2.soundcloud.com/tracks/$numericTrackId?client_id=$cId"
+                    val request = Request.Builder()
+                        .url(trackUrl)
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                        .build()
+                    val response = client.newCall(request).execute()
+                    if (response.code == 401 || response.code == 403) {
+                        rotateClientId()
+                        continue
+                    }
+                    val body = response.body?.string() ?: continue
+                    val json = JSONObject(body)
+                    val media = json.optJSONObject("media")
+                    val transcodings = media?.optJSONArray("transcodings") ?: continue
+
+                    for (j in 0 until transcodings.length()) {
+                        val trans = transcodings.optJSONObject(j) ?: continue
+                        val transUrl = trans.optString("url")
+                        if (transUrl.isEmpty()) continue
+
+                        val transDelimiter = if (transUrl.contains("?")) "&" else "?"
+                        val streamReq = Request.Builder()
+                            .url("$transUrl${transDelimiter}client_id=$cId")
+                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                            .build()
+                        val streamResp = client.newCall(streamReq).execute()
+                        if (!streamResp.isSuccessful) continue
+                        val streamBody = streamResp.body?.string() ?: continue
+                        val directUrl = JSONObject(streamBody).optString("url", null)
+                        if (!directUrl.isNullOrEmpty()) {
+                            Log.i(tag, "Resolved SoundCloud stream via track fallback for ${song.title}")
+                            return@withContext directUrl
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(tag, "Error during SoundCloud track fallback for $numericTrackId", e)
+                    rotateClientId()
+                }
+            }
+        }
+
+        Log.e(tag, "Failed to resolve any SoundCloud stream for ${song.title} (${song.id})")
         null
     }
 }

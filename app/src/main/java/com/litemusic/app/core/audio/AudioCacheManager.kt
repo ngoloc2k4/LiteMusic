@@ -39,7 +39,7 @@ object AudioCacheManager {
 
     fun buildCacheDataSourceFactory(context: Context): DataSource.Factory {
         val upstreamFactory = OkHttpDataSource.Factory(okHttpClient)
-            .setUserAgent("LiteMusic/1.0 (Android; Mobile)")
+            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 
         val cache = getCache(context)
         return CacheDataSource.Factory()

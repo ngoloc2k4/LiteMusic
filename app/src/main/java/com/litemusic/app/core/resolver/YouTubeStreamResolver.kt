@@ -326,10 +326,17 @@ class YouTubeStreamResolver(
 
     suspend fun resolveVideoStreamUrl(song: Song): String? = withContext(Dispatchers.IO) {
         val videoId = song.sourceId
-        resolveVideoViaVisionOs(videoId)
+        val pair = resolveVideoAndAudioViaVisionOs(videoId)
+        if (pair != null) {
+            if (pair.second != null) {
+                song.streamUrl = pair.second
+            }
+            return@withContext pair.first
+        }
+        null
     }
 
-    private fun resolveVideoViaVisionOs(videoId: String): String? {
+    private fun resolveVideoAndAudioViaVisionOs(videoId: String): Pair<String, String?>? {
         try {
             if (cachedVisitorData == null) {
                 refreshVisitorData(videoId)
@@ -364,22 +371,36 @@ class YouTubeStreamResolver(
             val streamingData = json.optJSONObject("streamingData") ?: return null
             val adaptiveFormats = streamingData.optJSONArray("adaptiveFormats") ?: return null
 
-            var chosenUrl: String? = null
+            var chosenVideoUrl: String? = null
             var bestHeight = 0
+            var chosenAudioUrl: String? = null
+            var bestAudioBitrate = 0
 
             for (i in 0 until adaptiveFormats.length()) {
                 val format = adaptiveFormats.optJSONObject(i) ?: continue
                 val mimeType = format.optString("mimeType")
+                val url = format.optString("url")
+                if (url.isEmpty()) continue
+
                 if (mimeType.contains("video/mp4")) {
                     val height = format.optInt("height", 0)
-                    val url = format.optString("url")
-                    if (url.isNotEmpty() && height > bestHeight && height <= 1080) {
+                    if (height > bestHeight && height <= 1080) {
                         bestHeight = height
-                        chosenUrl = url
+                        chosenVideoUrl = url
+                    }
+                } else if (mimeType.contains("audio/")) {
+                    val bitrate = format.optInt("bitrate", 0)
+                    if (bitrate > bestAudioBitrate) {
+                        bestAudioBitrate = bitrate
+                        chosenAudioUrl = url
                     }
                 }
             }
-            return chosenUrl
+
+            if (chosenVideoUrl != null) {
+                return Pair(chosenVideoUrl, chosenAudioUrl)
+            }
+            return null
         } catch (e: Exception) {
             Log.w(tag, "VISIONOS video stream resolution error for $videoId", e)
             return null

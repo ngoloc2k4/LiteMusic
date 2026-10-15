@@ -210,6 +210,10 @@ class MainActivity : ComponentActivity() {
         val isSameSong = (currentPlayingSong?.id == song.id && controller.currentMediaItem != null)
         val curPos = if (isSameSong) controller.currentPosition else 0L
 
+        if (!isSameSong) {
+            controller.pause()
+        }
+
         currentPlayingSong = song
 
         playJob = lifecycleScope.launch {
@@ -220,8 +224,11 @@ class MainActivity : ComponentActivity() {
                 activeLyrics = lrcClient.getLyrics(song.title, song.artist, song.durationSeconds)
             }
 
+            val isVideoSource = (song.source == AudioSource.YOUTUBE_MUSIC || song.source == AudioSource.YOUTUBE_VIDEO)
+            val effectiveAsVideo = asVideo && isVideoSource
+
             // Resolve real playable stream URL from YouTube Opus / Video MP4 / SoundCloud / Spotify Bridge
-            val url = if (asVideo && (song.source == AudioSource.YOUTUBE_MUSIC || song.source == AudioSource.YOUTUBE_VIDEO)) {
+            val url = if (effectiveAsVideo) {
                 song.videoUrl ?: ytResolver.resolveVideoStreamUrl(song)?.also { song.videoUrl = it }
                     ?: ytResolver.resolveStreamUrl(song)
             } else {
@@ -235,16 +242,27 @@ class MainActivity : ComponentActivity() {
             isResolvingStream = false
 
             if (url != null) {
-                val mediaItem = MediaItem.Builder()
+                val extras = android.os.Bundle().apply {
+                    if (effectiveAsVideo && !song.streamUrl.isNullOrEmpty() && song.streamUrl != url) {
+                        putString("audioUrl", song.streamUrl)
+                    }
+                }
+                val mediaItemBuilder = MediaItem.Builder()
                     .setUri(Uri.parse(url))
                     .setMediaMetadata(
                         MediaMetadata.Builder()
                             .setTitle(song.title)
                             .setArtist(song.artist)
                             .setArtworkUri(if (song.thumbnailUrl.isNotEmpty()) Uri.parse(song.thumbnailUrl) else null)
+                            .setExtras(extras)
                             .build()
                     )
-                    .build()
+
+                if (url.contains(".m3u8") || url.contains("/hls")) {
+                    mediaItemBuilder.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+                }
+
+                val mediaItem = mediaItemBuilder.build()
                 controller.setMediaItem(mediaItem)
                 controller.prepare()
                 if (isSameSong && curPos > 0) {
@@ -252,6 +270,8 @@ class MainActivity : ComponentActivity() {
                 }
                 controller.play()
             } else {
+                controller.pause()
+                controller.clearMediaItems()
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@MainActivity, "Không thể lấy luồng âm thanh hoặc video cho bài này", Toast.LENGTH_SHORT).show()
                 }
@@ -329,15 +349,24 @@ fun MainAppScreen(
     var aiGenerationState by remember { mutableStateOf<AiGenerationState>(AiGenerationState.Idle) }
     var showAiDialog by remember { mutableStateOf(false) }
 
+    fun playTrack(song: Song, requestedVideo: Boolean = isVideoMode) {
+        val canVideo = (song.source == AudioSource.YOUTUBE_MUSIC || song.source == AudioSource.YOUTUBE_VIDEO)
+        val actualVideo = requestedVideo && canVideo
+        if (!canVideo && isVideoMode) {
+            isVideoMode = false
+        }
+        activeSong = song
+        currentTitle = song.title
+        currentArtist = song.artist
+        currentArtwork = song.thumbnailUrl
+        onPlaySong(song, actualVideo)
+    }
+
     fun playNextInQueue() {
         if (songQueue.isNotEmpty()) {
             val next = songQueue.first()
             songQueue = songQueue.drop(1)
-            activeSong = next
-            currentTitle = next.title
-            currentArtist = next.artist
-            currentArtwork = next.thumbnailUrl
-            onPlaySong(next, isVideoMode)
+            playTrack(next, isVideoMode)
         } else {
             mediaController?.seekToNextMediaItem()
         }
@@ -702,11 +731,7 @@ fun MainAppScreen(
                                     SongListCard(
                                         song = song,
                                         onClick = {
-                                            activeSong = song
-                                            currentTitle = song.title
-                                            currentArtist = song.artist
-                                            currentArtwork = song.thumbnailUrl
-                                            onPlaySong(song, isVideoMode)
+                                            playTrack(song)
                                         },
                                         onAddToQueue = {
                                             songQueue = songQueue + song
@@ -768,11 +793,7 @@ fun MainAppScreen(
                                                 pair.forEach { song ->
                                                     Box(modifier = Modifier.weight(1f)) {
                                                         QuickPickTile(song = song, onClick = {
-                                                            activeSong = song
-                                                            currentTitle = song.title
-                                                            currentArtist = song.artist
-                                                            currentArtwork = song.thumbnailUrl
-                                                            onPlaySong(song, isVideoMode)
+                                                            playTrack(song)
                                                         })
                                                     }
                                                 }
@@ -797,11 +818,7 @@ fun MainAppScreen(
                                             AlbumGridCard(
                                                 song = song,
                                                 onClick = {
-                                                    activeSong = song
-                                                    currentTitle = song.title
-                                                    currentArtist = song.artist
-                                                    currentArtwork = song.thumbnailUrl
-                                                    onPlaySong(song, isVideoMode)
+                                                    playTrack(song)
                                                 }
                                             )
                                         }
@@ -822,11 +839,7 @@ fun MainAppScreen(
                                     SongListCard(
                                         song = song,
                                         onClick = {
-                                            activeSong = song
-                                            currentTitle = song.title
-                                            currentArtist = song.artist
-                                            currentArtwork = song.thumbnailUrl
-                                            onPlaySong(song, isVideoMode)
+                                            playTrack(song)
                                         },
                                         onAddToQueue = {
                                             songQueue = songQueue + song
@@ -909,9 +922,15 @@ fun MainAppScreen(
                 },
                 isVideoMode = isVideoMode,
                 onToggleVideoMode = { enableVideo ->
-                    isVideoMode = enableVideo
-                    (activeSong ?: currentSong)?.let { song ->
-                        onPlaySong(song, enableVideo)
+                    val cur = activeSong ?: currentSong
+                    val canVideo = cur?.source == AudioSource.YOUTUBE_MUSIC || cur?.source == AudioSource.YOUTUBE_VIDEO
+                    if (enableVideo && !canVideo) {
+                        Toast.makeText(context, "Chỉ hỗ trợ chế độ Video cho nguồn YouTube", Toast.LENGTH_SHORT).show()
+                    } else {
+                        isVideoMode = enableVideo
+                        cur?.let { song ->
+                            onPlaySong(song, enableVideo)
+                        }
                     }
                 },
                 mediaController = mediaController,
@@ -926,11 +945,7 @@ fun MainAppScreen(
                 songQueue = songQueue,
                 onPlayQueueSong = { qSong ->
                     songQueue = songQueue.filterNot { it.id == qSong.id }
-                    activeSong = qSong
-                    currentTitle = qSong.title
-                    currentArtist = qSong.artist
-                    currentArtwork = qSong.thumbnailUrl
-                    onPlaySong(qSong, isVideoMode)
+                    playTrack(qSong, isVideoMode)
                 },
                 onRemoveFromQueue = { idx ->
                     if (idx in songQueue.indices) {
@@ -955,11 +970,7 @@ fun MainAppScreen(
                     if (tracks.isNotEmpty()) {
                         val first = tracks.first()
                         songQueue = tracks.drop(1)
-                        activeSong = first
-                        currentTitle = first.title
-                        currentArtist = first.artist
-                        currentArtwork = first.thumbnailUrl
-                        onPlaySong(first, isVideoMode)
+                        playTrack(first, isVideoMode)
                     }
                 },
                 onAddToQueue = { tracks ->
@@ -1152,45 +1163,73 @@ fun M3MiniPlayer(
     val isGlass = LocalThemeStyle.current == AppThemeStyle.LIQUID_GLASS
     var dragOffsetX by remember { mutableFloatStateOf(0f) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    var lockedAxis by remember { mutableIntStateOf(0) } // 0: uncommitted, 1: horizontal, 2: vertical
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .height(58.dp)
-            .offset { IntOffset(dragOffsetX.roundToInt(), dragOffsetY.coerceAtLeast(0f).roundToInt()) }
+            .offset { IntOffset(dragOffsetX.roundToInt(), dragOffsetY.roundToInt()) }
             .clip(RoundedCornerShape(24.dp))
             .pointerInput(Unit) {
                 detectDragGestures(
+                    onDragStart = {
+                        lockedAxis = 0
+                    },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        dragOffsetX += dragAmount.x
-                        dragOffsetY += dragAmount.y
+                        val newX = dragOffsetX + dragAmount.x
+                        val newY = dragOffsetY + dragAmount.y
+                        if (lockedAxis == 0) {
+                            val absX = kotlin.math.abs(newX)
+                            val absY = kotlin.math.abs(newY)
+                            if (absX > 16f && absX > absY * 1.25f) {
+                                lockedAxis = 1
+                            } else if (absY > 16f && absY > absX * 1.25f) {
+                                lockedAxis = 2
+                            }
+                        }
+                        if (lockedAxis == 1) {
+                            dragOffsetX = newX.coerceIn(-160f, 160f)
+                            dragOffsetY = 0f
+                        } else if (lockedAxis == 2) {
+                            dragOffsetY = newY.coerceIn(-90f, 100f)
+                            dragOffsetX = 0f
+                        } else {
+                            dragOffsetX += dragAmount.x * 0.5f
+                            dragOffsetY += dragAmount.y * 0.5f
+                        }
                     },
                     onDragEnd = {
-                        val absX = abs(dragOffsetX)
-                        val absY = abs(dragOffsetY)
-                        val threshold = 65f
+                        val thresholdX = 55f
+                        val thresholdY = 45f
 
-                        if (dragOffsetY < -threshold) {
-                            // Vuốt từ dưới lên -> mở playback chi tiết
-                            onClick()
-                        } else if (dragOffsetY > threshold && dragOffsetY > absX) {
-                            // Vuốt từ trên xuống -> force stop và tắt hẳn bài đang phát và queue list
-                            onForceStop()
-                        } else if (dragOffsetX < -threshold) {
-                            // Vuốt sang trái -> skip next
-                            onNext()
-                        } else if (dragOffsetX > threshold) {
-                            // Vuốt sang phải -> skip previous
-                            onPrevious()
+                        if (lockedAxis == 2 || kotlin.math.abs(dragOffsetY) > kotlin.math.abs(dragOffsetX)) {
+                            if (dragOffsetY < -thresholdY) {
+                                // Vuốt từ dưới lên -> mở playback chi tiết
+                                onClick()
+                            } else if (dragOffsetY > thresholdY) {
+                                // Vuốt từ trên xuống -> force stop và tắt hẳn bài đang phát
+                                onForceStop()
+                            }
+                        } else if (lockedAxis == 1 || kotlin.math.abs(dragOffsetX) > kotlin.math.abs(dragOffsetY)) {
+                            if (dragOffsetX < -thresholdX) {
+                                // Vuốt sang trái -> skip next
+                                onNext()
+                            } else if (dragOffsetX > thresholdX) {
+                                // Vuốt sang phải -> skip previous
+                                onPrevious()
+                            }
                         }
 
                         dragOffsetX = 0f
                         dragOffsetY = 0f
+                        lockedAxis = 0
                     },
                     onDragCancel = {
                         dragOffsetX = 0f
                         dragOffsetY = 0f
+                        lockedAxis = 0
                     }
                 )
             }
@@ -1277,6 +1316,9 @@ fun M3FullScreenPlayer(
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showVolumeDialog by remember { mutableStateOf(false) }
     var showTimerDialog by remember { mutableStateOf(false) }
+
+    val currentPosLatest by rememberUpdatedState(currentPositionMs)
+    val durationLatest by rememberUpdatedState(durationMs)
 
     // Double-Tap to Skip Feedback State with Accumulator and Auto-reset
     var skipFeedbackSide by remember { mutableIntStateOf(0) } // -1 for left, 1 for right
@@ -1665,7 +1707,7 @@ fun M3FullScreenPlayer(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .pointerInput(skipDurationSeconds, currentPositionMs, durationMs) {
+                                .pointerInput(skipDurationSeconds) {
                                     detectTapGestures(
                                         onDoubleTap = { tapOffset ->
                                             val now = System.currentTimeMillis()
@@ -1681,11 +1723,11 @@ fun M3FullScreenPlayer(
                                             }
                                             lastDoubleTapTime = now
 
-                                            val basePos = if (pendingSeekTargetMs >= 0) pendingSeekTargetMs else currentPositionMs
+                                            val basePos = if (pendingSeekTargetMs >= 0) pendingSeekTargetMs else currentPosLatest
                                             val targetPos = if (isLeft) {
                                                 (basePos - skipDurationSeconds * 1000L).coerceAtLeast(0L)
                                             } else {
-                                                (basePos + skipDurationSeconds * 1000L).coerceAtMost(durationMs)
+                                                (basePos + skipDurationSeconds * 1000L).coerceAtMost(durationLatest)
                                             }
                                             pendingSeekTargetMs = targetPos
                                             onSeek(targetPos)

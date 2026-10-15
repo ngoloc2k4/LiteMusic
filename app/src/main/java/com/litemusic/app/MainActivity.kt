@@ -67,6 +67,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
 import kotlin.math.abs
+import com.litemusic.app.feature.aimusic.domain.AiGenerationState
+import com.litemusic.app.feature.aimusic.domain.AiPlaylistGenerator
+import com.litemusic.app.feature.aimusic.domain.LocalHeuristicRanker
+import com.litemusic.app.feature.aimusic.ui.AiPlaylistPreviewDialog
+import com.litemusic.app.feature.aimusic.ui.AiSearchTile
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -270,6 +275,11 @@ fun MainAppScreen(
     var skipDurationSeconds by remember { mutableIntStateOf(ThemePreferences.getSkipDuration(context)) }
     var activeSong by remember { mutableStateOf<Song?>(currentSong) }
     var songQueue by remember { mutableStateOf<List<Song>>(emptyList()) }
+
+    // AI Music Generator State
+    val aiGenerator = remember { AiPlaylistGenerator(context) }
+    var aiGenerationState by remember { mutableStateOf<AiGenerationState>(AiGenerationState.Idle) }
+    var showAiDialog by remember { mutableStateOf(false) }
 
     fun playNextInQueue() {
         if (songQueue.isNotEmpty()) {
@@ -651,6 +661,25 @@ fun MainAppScreen(
                                         }
                                     )
                                 }
+                                // Dòng cuối cùng: Thẻ tạo Playlist bằng AI nổi bật
+                                item {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    AiSearchTile(
+                                        query = searchQuery,
+                                        onClick = {
+                                            showAiDialog = true
+                                            coroutineScope.launch {
+                                                aiGenerator.generatePlaylist(
+                                                    userPrompt = searchQuery,
+                                                    targetSongCount = 20
+                                                ) { state ->
+                                                    aiGenerationState = state
+                                                }
+                                            }
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                }
                             }
                         }
                     } else {
@@ -861,6 +890,44 @@ fun MainAppScreen(
                 },
                 onSkipNext = { playNextInQueue() },
                 onSkipPrevious = { playPreviousInQueue() }
+            )
+        }
+
+        // AI Playlist Preview & Generation Dialog
+        if (showAiDialog) {
+            AiPlaylistPreviewDialog(
+                state = aiGenerationState,
+                onDismiss = { showAiDialog = false },
+                onPlayNow = { tracks ->
+                    if (tracks.isNotEmpty()) {
+                        val first = tracks.first()
+                        songQueue = tracks.drop(1)
+                        activeSong = first
+                        currentTitle = first.title
+                        currentArtist = first.artist
+                        currentArtwork = first.thumbnailUrl
+                        onPlaySong(first, isVideoMode)
+                    }
+                },
+                onAddToQueue = { tracks ->
+                    songQueue = songQueue + tracks
+                    Toast.makeText(context, "Đã thêm ${tracks.size} bài vào danh sách chờ", Toast.LENGTH_SHORT).show()
+                },
+                onFallbackLocal = {
+                    coroutineScope.launch {
+                        val localTracks = LocalHeuristicRanker.rankAndFilter(
+                            candidates = if (searchResults.isNotEmpty()) searchResults else homeSongs,
+                            prompt = searchQuery,
+                            targetCount = 20
+                        )
+                        aiGenerationState = AiGenerationState.Success(
+                            playlistTitle = "Playlist: $searchQuery",
+                            playlistDescription = "Tuyển tập tạo bằng thuật toán cục bộ.",
+                            tracks = localTracks,
+                            providerUsed = "Thuật toán cục bộ (Offline)"
+                        )
+                    }
+                }
             )
         }
     }

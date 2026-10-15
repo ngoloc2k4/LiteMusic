@@ -440,7 +440,12 @@ fun SettingsScreen(
             }
         }
 
-        // Section 6: Thông tin ứng dụng
+        // Section 6: Cấu hình AI Music & LLM Multi-Provider
+        item {
+            com.litemusic.app.feature.aimusic.ui.AiSettingsSection(isGlass = isGlass)
+        }
+
+        // Section 7: Thông tin ứng dụng
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),

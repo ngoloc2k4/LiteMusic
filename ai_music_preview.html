@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LiteMusic - AI Music & Smart Playlist Preview</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0f17;
+            --surface-color: #131b26;
+            --surface-variant: #1a2434;
+            --surface-glass: rgba(19, 27, 38, 0.85);
+            --primary: #4ade80;
+            --primary-glow: rgba(74, 222, 128, 0.25);
+            --accent-ai: #a855f7;
+            --accent-ai-glow: rgba(168, 85, 247, 0.35);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border-glass: rgba(255, 255, 255, 0.08);
+            --border-ai: linear-gradient(135deg, #a855f7, #3b82f6, #4ade80);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: #030712;
+            color: var(--text-primary);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* Mock Phone Container */
+        .phone-mockup {
+            width: 100%;
+            max-width: 412px;
+            height: 860px;
+            background: var(--bg-color);
+            border-radius: 44px;
+            border: 8px solid #1e293b;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(168, 85, 247, 0.15);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Top Notch */
+        .phone-header {
+            padding: 12px 24px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            z-index: 10;
+        }
+
+        /* Tabs Nav at top of preview */
+        .preview-switcher {
+            display: flex;
+            background: var(--surface-variant);
+            margin: 0 16px 12px;
+            border-radius: 20px;
+            padding: 4px;
+            gap: 4px;
+        }
+        .switcher-btn {
+            flex: 1;
+            padding: 8px 10px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 700;
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .switcher-btn.active {
+            background: var(--primary);
+            color: #052e16;
+            box-shadow: 0 2px 8px var(--primary-glow);
+        }
+
+        /* Views */
+        .screen-view {
+            flex: 1;
+            padding: 0 16px 80px;
+            overflow-y: auto;
+            display: none;
+        }
+        .screen-view.active {
+            display: block;
+        }
+
+        /* View 1: Search screen with AI integrated tile at bottom */
+        .search-bar-wrap {
+            position: relative;
+            margin-bottom: 16px;
+        }
+        .search-input {
+            width: 100%;
+            height: 50px;
+            background: var(--surface-color);
+            border: 1px solid var(--border-glass);
+            border-radius: 25px;
+            padding: 0 48px 0 20px;
+            color: var(--text-primary);
+            font-size: 14px;
+            outline: none;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+        }
+        .search-icon-right {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--primary);
+            font-size: 18px;
+        }
+
+        /* Section Title */
+        .sec-title {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin: 14px 0 10px;
+        }
+
+        /* Regular Search Results */
+        .track-item {
+            display: flex;
+            align-items: center;
+            background: var(--surface-color);
+            border-radius: 16px;
+            padding: 10px;
+            margin-bottom: 8px;
+            border: 1px solid var(--border-glass);
+            gap: 12px;
+        }
+        .track-thumb {
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            background: #334155;
+            object-fit: cover;
+        }
+        .track-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .track-name {
+            font-size: 13px;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .track-sub {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        /* SPECIAL HIGHLIGHTED AI SEARCH BOTTOM ROW TILE */
+        .ai-search-bottom-tile {
+            position: relative;
+            margin-top: 16px;
+            margin-bottom: 24px;
+            padding: 2px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #a855f7, #3b82f6, #10b981);
+            box-shadow: 0 8px 24px var(--accent-ai-glow);
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            animation: pulse-glow 3s infinite alternate;
+        }
+        .ai-search-bottom-tile:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(168, 85, 247, 0.5);
+        }
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 4px 16px rgba(168, 85, 247, 0.25); }
+            100% { box-shadow: 0 8px 28px rgba(59, 130, 246, 0.45); }
+        }
+
+        .ai-tile-inner {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(12px);
+            border-radius: 18px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .ai-icon-badge {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #a855f7, #6366f1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4);
+        }
+        .ai-tile-content {
+            flex: 1;
+        }
+        .ai-tile-tag {
+            font-size: 10px;
+            font-weight: 800;
+            color: #c084fc;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+        .ai-tile-title {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-top: 1px;
+        }
+        .ai-tile-desc {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+
+        /* View 2: AI Generating Stepper Modal / Sheet */
+        .stepper-card {
+            background: var(--surface-color);
+            border: 1px solid var(--border-glass);
+            border-radius: 24px;
+            padding: 20px;
+            margin-top: 10px;
+        }
+        .stepper-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .stepper-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #a855f7, #3b82f6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+        }
+        .step-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            margin-bottom: 18px;
+            position: relative;
+        }
+        .step-row:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            left: 13px;
+            top: 28px;
+            width: 2px;
+            height: 24px;
+            background: #334155;
+        }
+        .step-row.done:not(:last-child)::after {
+            background: var(--primary);
+        }
+        .step-indicator {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #1e293b;
+            color: var(--text-secondary);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 12px;
+            font-weight: 700;
+            z-index: 2;
+            flex-shrink: 0;
+        }
+        .step-row.active .step-indicator {
+            background: #a855f7;
+            color: white;
+            box-shadow: 0 0 14px rgba(168, 85, 247, 0.6);
+            animation: pulse-step 1.5s infinite;
+        }
+        .step-row.done .step-indicator {
+            background: var(--primary);
+            color: #022c22;
+        }
+        @keyframes pulse-step {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        /* View 3: Playlist Preview & Handoff */
+        .preview-header-card {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(59, 130, 246, 0.15));
+            border: 1px solid rgba(168, 85, 247, 0.3);
+            border-radius: 20px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .preview-title {
+            font-size: 16px;
+            font-weight: 800;
+            color: white;
+        }
+        .preview-desc {
+            font-size: 12px;
+            color: #cbd5e1;
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+        .action-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 14px;
+        }
+        .btn-handoff {
+            flex: 1;
+            padding: 10px;
+            border-radius: 12px;
+            border: none;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .btn-play-now {
+            background: var(--primary);
+            color: #052e16;
+        }
+        .btn-queue {
+            background: var(--surface-variant);
+            color: white;
+            border: 1px solid var(--border-glass);
+        }
+
+        /* View 4: Settings & 3-Day Model Cache */
+        .settings-card {
+            background: var(--surface-color);
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            padding: 16px;
+            margin-bottom: 14px;
+        }
+        .cache-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 10.5px;
+            font-weight: 700;
+            margin-top: 6px;
+        }
+
+        /* Bottom Floating Bar */
+        .bottom-nav {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 64px;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(12px);
+            border-top: 1px solid var(--border-glass);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 0 10px;
+        }
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: var(--text-secondary);
+            font-size: 10px;
+            gap: 3px;
+            cursor: pointer;
+        }
+        .nav-item.active {
+            color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="phone-mockup">
+        <!-- Phone Status Bar -->
+        <div class="phone-header">
+            <span>09:41</span>
+            <span>LTE • 98%</span>
+        </div>
+
+        <!-- Preview View Switcher Tabs -->
+        <div class="preview-switcher">
+            <button class="switcher-btn active" onclick="switchView('view-search')">1. Tìm kiếm + AI Tile</button>
+            <button class="switcher-btn" onclick="switchView('view-stepper')">2. Tiến trình AI</button>
+            <button class="switcher-btn" onclick="switchView('view-preview')">3. Playlist Preview</button>
+            <button class="switcher-btn" onclick="switchView('view-settings')">4. Cache 3 ngày</button>
+        </div>
+
+        <!-- VIEW 1: SEARCH INTEGRATION -->
+        <div id="view-search" class="screen-view active">
+            <div class="search-bar-wrap">
+                <input type="text" class="search-input" value="nhạc chill học bài đêm khuya" placeholder="Tìm kiếm bài hát, nghệ sĩ...">
+                <span class="search-icon-right">🔍</span>
+            </div>
+
+            <div class="sec-title">Kết quả gợi ý trực tiếp (YouTube & SoundCloud)</div>
+            
+            <div class="track-item">
+                <img src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&q=80" class="track-thumb" alt="thumb">
+                <div class="track-info">
+                    <div class="track-name">1 Giờ Lofi Chill Học Bài Cực Tập Trung</div>
+                    <div class="track-sub">YouTube • 3.2M lượt nghe</div>
+                </div>
+                <span>▶</span>
+            </div>
+
+            <div class="track-item">
+                <img src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=100&q=80" class="track-thumb" alt="thumb">
+                <div class="track-info">
+                    <div class="track-name">Đêm Nay Tôi Muốn Một Mình</div>
+                    <div class="track-sub">SoundCloud • Indie Chill</div>
+                </div>
+                <span>▶</span>
+            </div>
+
+            <!-- NÚT AI NỔI BẬT Ở DÒNG CUỐI CÙNG THEO YÊU CẦU -->
+            <div class="ai-search-bottom-tile" onclick="switchView('view-stepper')">
+                <div class="ai-tile-inner">
+                    <div class="ai-icon-badge">✨</div>
+                    <div class="ai-tile-content">
+                        <div class="ai-tile-tag">AI Smart Planner • Multi-Source</div>
+                        <div class="ai-tile-title">Tạo Playlist thông minh bằng AI</div>
+                        <div class="ai-tile-desc">Dùng Gemini / OpenRouter để gom 25 bài từ YouTube & SoundCloud phù hợp nhất</div>
+                    </div>
+                    <span style="color: #a855f7; font-size: 18px; font-weight: bold;">➔</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 2: AI STEPPER PROGRESS -->
+        <div id="view-stepper" class="screen-view">
+            <div class="sec-title">AI Playlist Pipeline</div>
+            <div class="stepper-card">
+                <div class="stepper-header">
+                    <div class="stepper-avatar">🤖</div>
+                    <div>
+                        <div style="font-weight: 800; font-size: 15px;">Đang kiến tạo Playlist...</div>
+                        <div style="font-size: 11px; color: var(--text-secondary);">Provider: Gemini 2.5 Flash (Free Tier)</div>
+                    </div>
+                </div>
+
+                <!-- Step 1 -->
+                <div class="step-row done">
+                    <div class="step-indicator">✓</div>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 700;">Phân tích yêu cầu (Parse Intent)</div>
+                        <div style="font-size: 11px; color: #64748b;">Mood: Thư giãn, Học bài • Thể loại: Lofi, Acoustic</div>
+                    </div>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="step-row done">
+                    <div class="step-indicator">✓</div>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 700;">Tìm kiếm song song (Multi-Search)</div>
+                        <div style="font-size: 11px; color: #64748b;">Thu thập 40 bài ứng viên từ YouTube & SoundCloud</div>
+                    </div>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="step-row done">
+                    <div class="step-indicator">✓</div>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 700;">Lọc trùng & xếp hạng cục bộ</div>
+                        <div style="font-size: 11px; color: #64748b;">Loại bỏ 6 bài trùng lặp, chấm điểm metadata</div>
+                    </div>
+                </div>
+
+                <!-- Step 4 -->
+                <div class="step-row active">
+                    <div class="step-indicator">⚡</div>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 700; color: #c084fc;">AI tối ưu hóa thứ tự playlist</div>
+                        <div style="font-size: 11px; color: #a855f7;">Đang chọn 20 bài có tiết tấu chuyển tiếp êm ái nhất...</div>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn-handoff btn-play-now" style="width: 100%; margin-top: 20px; padding: 12px;" onclick="switchView('view-preview')">
+                Xem kết quả xem trước ➔
+            </button>
+        </div>
+
+        <!-- VIEW 3: PLAYLIST PREVIEW & QUEUE HANDOFF -->
+        <div id="view-preview" class="screen-view">
+            <div class="preview-header-card">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="preview-title">🌙 Lofi Midnight Study (20 bài)</span>
+                    <span style="font-size: 10px; background: rgba(74, 222, 128, 0.2); color: #4ade80; padding: 2px 8px; border-radius: 8px; font-weight: 800;">AI READY</span>
+                </div>
+                <div class="preview-desc">
+                    Tập hợp các bản lofi êm dịu, không lời từ YouTube và SoundCloud, tối ưu cho sự tập trung sâu khi học bài đêm.
+                </div>
+                <div class="action-row">
+                    <button class="btn-handoff btn-play-now" onclick="alert('Đã đẩy 20 bài vào Playback Engine và phát ngay!')">
+                        ▶ Phát ngay
+                    </button>
+                    <button class="btn-handoff btn-queue" onclick="alert('Đã thêm 20 bài vào cuối danh sách chờ (Queue)!')">
+                        + Thêm vào Queue
+                    </button>
+                </div>
+            </div>
+
+            <div class="sec-title">Danh sách bài đã chọn lọc</div>
+            <div class="track-item">
+                <div style="font-size: 12px; font-weight: 800; color: var(--primary); width: 16px;">1</div>
+                <img src="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=100&q=80" class="track-thumb">
+                <div class="track-info">
+                    <div class="track-name">Coffee Shop Rain Lofi Beats</div>
+                    <div class="track-sub">YouTube • 3:24 • AI Score: 98%</div>
+                </div>
+                <span style="color: #64748b; font-size: 12px;">⋮</span>
+            </div>
+
+            <div class="track-item">
+                <div style="font-size: 12px; font-weight: 800; color: var(--primary); width: 16px;">2</div>
+                <img src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&q=80" class="track-thumb">
+                <div class="track-info">
+                    <div class="track-name">Chillhop Essentials Summer Tape</div>
+                    <div class="track-sub">SoundCloud • 2:48 • AI Score: 95%</div>
+                </div>
+                <span style="color: #64748b; font-size: 12px;">⋮</span>
+            </div>
+        </div>
+
+        <!-- VIEW 4: SETTINGS & 3-DAY CACHING -->
+        <div id="view-settings" class="screen-view">
+            <div class="sec-title">Cấu hình Multi-Provider AI</div>
+
+            <div class="settings-card">
+                <div style="font-weight: 700; font-size: 14px; margin-bottom: 6px;">Nhà cung cấp chính (Primary Provider)</div>
+                <select style="width: 100%; height: 42px; background: var(--surface-variant); border: 1px solid var(--border-glass); border-radius: 12px; color: white; padding: 0 10px;">
+                    <option>Google Gemini (Mặc định - Free Tier)</option>
+                    <option>OpenRouter (Truy cập model :free)</option>
+                    <option>OpenAI Compatible Endpoint</option>
+                    <option>Offline Heuristic (Không cần AI/API)</option>
+                </select>
+
+                <div style="margin-top: 14px; font-weight: 700; font-size: 13px;">Model đã tải (Cache 3 ngày):</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+                    <span style="font-size: 12px; color: #cbd5e1;">gemini-2.5-flash</span>
+                    <span class="cache-badge">✓ Đã cache (Còn 2 ngày 18h)</span>
+                </div>
+                <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
+                    Tự động đồng bộ danh sách model từ API mỗi 3 ngày khi có API key. Nếu không có API key hoặc mất mạng, tự động dùng thuật toán lọc cục bộ.
+                </div>
+            </div>
+
+            <div class="settings-card">
+                <div style="font-weight: 700; font-size: 14px; margin-bottom: 6px;">Bảo mật API Key (Android Keystore)</div>
+                <input type="password" style="width: 100%; height: 42px; background: var(--surface-variant); border: 1px solid var(--border-glass); border-radius: 12px; color: white; padding: 0 12px;" value="AIzaSyD-sample-encrypted-key">
+                <div style="font-size: 11px; color: #34d399; margin-top: 6px;">🔒 Đã mã hóa bằng AES-256 GCM qua Android Keystore</div>
+            </div>
+        </div>
+
+        <!-- Bottom Navigation Mock -->
+        <div class="bottom-nav">
+            <div class="nav-item"><span>🏠</span><span>Khám phá</span></div>
+            <div class="nav-item active"><span>🔍</span><span>Tìm kiếm</span></div>
+            <div class="nav-item"><span>📚</span><span>Thư viện</span></div>
+            <div class="nav-item"><span>⚙️</span><span>Cài đặt</span></div>
+        </div>
+    </div>
+
+    <script>
+        function switchView(viewId) {
+            document.querySelectorAll('.screen-view').forEach(view => view.classList.remove('active'));
+            document.querySelectorAll('.switcher-btn').forEach(btn => btn.classList.remove('active'));
+            
+            document.getElementById(viewId).classList.add('active');
+            
+            const btnMap = {
+                'view-search': 0,
+                'view-stepper': 1,
+                'view-preview': 2,
+                'view-settings': 3
+            };
+            document.querySelectorAll('.switcher-btn')[btnMap[viewId]].classList.add('active');
+        }
+    </script>
+</body>
+</html>

@@ -35,7 +35,9 @@ fun SettingsScreen(
     onThemeStyleChange: (AppThemeStyle) -> Unit,
     isDspEnabled: Boolean,
     onDspToggle: (Boolean) -> Unit,
-    onClearCache: () -> Unit
+    onClearCache: () -> Unit,
+    currentSkipDuration: Int = 10,
+    onSkipDurationChange: (Int) -> Unit = {}
 ) {
     val isGlass = currentThemeStyle == AppThemeStyle.LIQUID_GLASS
 
@@ -393,7 +395,52 @@ fun SettingsScreen(
             }
         }
 
-        // Section 5: Thông tin ứng dụng
+        // Section 5: Cử chỉ tua nhạc (Double Tap to Skip)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isGlass) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow
+                ),
+                border = if (isGlass) BorderStroke(1.dp, GlassBorderDark) else CardDefaults.outlinedCardBorder()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "⏭️ Cử chỉ tua nhạc (Double-Tap to Skip)",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Chạm 2 lần vào nửa trái để tua lùi, chạm 2 lần vào nửa phải để tua đi trong trình phát.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+
+                    val skipOptions = listOf(10, 15, 20)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        skipOptions.forEach { seconds ->
+                            val isSelected = currentSkipDuration == seconds
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { onSkipDurationChange(seconds) },
+                                label = { Text("$seconds giây", fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                leadingIcon = if (isSelected) {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                                } else null,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section 6: Thông tin ứng dụng
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),

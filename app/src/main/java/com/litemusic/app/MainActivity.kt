@@ -60,6 +60,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.litemusic.app.core.audio.AudioEffectManager
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import kotlin.math.abs
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -259,6 +266,48 @@ fun MainAppScreen(
     var sleepTimerSeconds by remember { mutableStateOf<Long?>(null) }
     var isStopAtEndOfTrack by remember { mutableStateOf(false) }
 
+    // Double-tap Skip Duration & Queue state
+    var skipDurationSeconds by remember { mutableIntStateOf(ThemePreferences.getSkipDuration(context)) }
+    var activeSong by remember { mutableStateOf<Song?>(currentSong) }
+    var songQueue by remember { mutableStateOf<List<Song>>(emptyList()) }
+
+    fun playNextInQueue() {
+        if (songQueue.isNotEmpty()) {
+            val next = songQueue.first()
+            songQueue = songQueue.drop(1)
+            activeSong = next
+            currentTitle = next.title
+            currentArtist = next.artist
+            currentArtwork = next.thumbnailUrl
+            onPlaySong(next, isVideoMode)
+        } else {
+            mediaController?.seekToNextMediaItem()
+        }
+    }
+
+    fun playPreviousInQueue() {
+        if (currentPositionMs > 3000L) {
+            mediaController?.seekTo(0)
+        } else {
+            mediaController?.seekToPreviousMediaItem()
+            mediaController?.seekTo(0)
+        }
+    }
+
+    fun forceStopPlayback() {
+        mediaController?.stop()
+        mediaController?.clearMediaItems()
+        isPlaying = false
+        currentTitle = ""
+        currentArtist = ""
+        currentArtwork = ""
+        currentPositionMs = 0L
+        durationMs = 0L
+        songQueue = emptyList()
+        isPlayerSheetOpen = false
+        Toast.makeText(context, "Đã tắt hẳn bài đang phát và danh sách chờ", Toast.LENGTH_SHORT).show()
+    }
+
     // Sleep Timer Live Countdown Loop
     LaunchedEffect(sleepTimerSeconds) {
         val s = sleepTimerSeconds
@@ -306,6 +355,17 @@ fun MainAppScreen(
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
+            }
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED) {
+                    if (isStopAtEndOfTrack) {
+                        mediaController?.pause()
+                        isStopAtEndOfTrack = false
+                        Toast.makeText(context, "Đã dừng phát khi hết bài hát", Toast.LENGTH_SHORT).show()
+                    } else if (songQueue.isNotEmpty()) {
+                        playNextInQueue()
+                    }
+                }
             }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 mediaItem?.mediaMetadata?.let {
@@ -404,7 +464,12 @@ fun MainAppScreen(
                             onThemeStyleChange = onThemeStyleChange,
                             isDspEnabled = isDspEnabled,
                             onDspToggle = onDspToggle,
-                            onClearCache = onClearCache
+                            onClearCache = onClearCache,
+                            currentSkipDuration = skipDurationSeconds,
+                            onSkipDurationChange = { newSec ->
+                                skipDurationSeconds = newSec
+                                ThemePreferences.setSkipDuration(context, newSec)
+                            }
                         )
                         if (currentTitle.isNotEmpty()) {
                             Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)) {
@@ -419,7 +484,9 @@ fun MainAppScreen(
                                             if (it.isPlaying) it.pause() else it.play()
                                         }
                                     },
-                                    onNext = { mediaController?.seekToNextMediaItem() },
+                                    onNext = { playNextInQueue() },
+                                    onPrevious = { playPreviousInQueue() },
+                                    onForceStop = { forceStopPlayback() },
                                     onClick = { isPlayerSheetOpen = true }
                                 )
                             }
@@ -569,12 +636,20 @@ fun MainAppScreen(
                                     )
                                 }
                                 items(searchResults) { song ->
-                                    SongListCard(song = song, onClick = {
-                                        currentTitle = song.title
-                                        currentArtist = song.artist
-                                        currentArtwork = song.thumbnailUrl
-                                        onPlaySong(song, isVideoMode)
-                                    })
+                                    SongListCard(
+                                        song = song,
+                                        onClick = {
+                                            activeSong = song
+                                            currentTitle = song.title
+                                            currentArtist = song.artist
+                                            currentArtwork = song.thumbnailUrl
+                                            onPlaySong(song, isVideoMode)
+                                        },
+                                        onAddToQueue = {
+                                            songQueue = songQueue + song
+                                            Toast.makeText(context, "Đã thêm vào danh sách chờ: ${song.title}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -611,6 +686,7 @@ fun MainAppScreen(
                                                 pair.forEach { song ->
                                                     Box(modifier = Modifier.weight(1f)) {
                                                         QuickPickTile(song = song, onClick = {
+                                                            activeSong = song
                                                             currentTitle = song.title
                                                             currentArtist = song.artist
                                                             currentArtwork = song.thumbnailUrl
@@ -639,6 +715,7 @@ fun MainAppScreen(
                                             AlbumGridCard(
                                                 song = song,
                                                 onClick = {
+                                                    activeSong = song
                                                     currentTitle = song.title
                                                     currentArtist = song.artist
                                                     currentArtwork = song.thumbnailUrl
@@ -660,12 +737,20 @@ fun MainAppScreen(
                                 }
 
                                 items(homeSongs.drop(12)) { song ->
-                                    SongListCard(song = song, onClick = {
-                                        currentTitle = song.title
-                                        currentArtist = song.artist
-                                        currentArtwork = song.thumbnailUrl
-                                        onPlaySong(song, isVideoMode)
-                                    })
+                                    SongListCard(
+                                        song = song,
+                                        onClick = {
+                                            activeSong = song
+                                            currentTitle = song.title
+                                            currentArtist = song.artist
+                                            currentArtwork = song.thumbnailUrl
+                                            onPlaySong(song, isVideoMode)
+                                        },
+                                        onAddToQueue = {
+                                            songQueue = songQueue + song
+                                            Toast.makeText(context, "Đã thêm vào danh sách chờ: ${song.title}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -685,7 +770,9 @@ fun MainAppScreen(
                                         if (it.isPlaying) it.pause() else it.play()
                                     }
                                 },
-                                onNext = { mediaController?.seekToNextMediaItem() },
+                                onNext = { playNextInQueue() },
+                                onPrevious = { playPreviousInQueue() },
+                                onForceStop = { forceStopPlayback() },
                                 onClick = { isPlayerSheetOpen = true }
                             )
                         }
@@ -695,14 +782,14 @@ fun MainAppScreen(
         }
     }
 
-        // Full Screen Player Sheet with Synced Lyrics
+        // Full Screen Player Sheet with Synced Lyrics & Queue
         AnimatedVisibility(
             visible = isPlayerSheetOpen,
             enter = slideInVertically(initialOffsetY = { it }),
             exit = slideOutVertically(targetOffsetY = { it })
         ) {
             M3FullScreenPlayer(
-                currentSong = currentSong,
+                currentSong = activeSong ?: currentSong,
                 title = currentTitle,
                 artist = currentArtist,
                 artworkUrl = currentArtwork,
@@ -741,7 +828,7 @@ fun MainAppScreen(
                 isVideoMode = isVideoMode,
                 onToggleVideoMode = { enableVideo ->
                     isVideoMode = enableVideo
-                    currentSong?.let { song ->
+                    (activeSong ?: currentSong)?.let { song ->
                         onPlaySong(song, enableVideo)
                     }
                 },
@@ -752,7 +839,28 @@ fun MainAppScreen(
                         if (it.isPlaying) it.pause() else it.play()
                     }
                 },
-                onSeek = onSeek
+                onSeek = onSeek,
+                skipDurationSeconds = skipDurationSeconds,
+                songQueue = songQueue,
+                onPlayQueueSong = { qSong ->
+                    songQueue = songQueue.filterNot { it.id == qSong.id }
+                    activeSong = qSong
+                    currentTitle = qSong.title
+                    currentArtist = qSong.artist
+                    currentArtwork = qSong.thumbnailUrl
+                    onPlaySong(qSong, isVideoMode)
+                },
+                onRemoveFromQueue = { idx ->
+                    if (idx in songQueue.indices) {
+                        songQueue = songQueue.toMutableList().apply { removeAt(idx) }
+                    }
+                },
+                onClearQueue = {
+                    songQueue = emptyList()
+                    Toast.makeText(context, "Đã xóa toàn bộ danh sách chờ", Toast.LENGTH_SHORT).show()
+                },
+                onSkipNext = { playNextInQueue() },
+                onSkipPrevious = { playPreviousInQueue() }
             )
         }
     }
@@ -849,7 +957,11 @@ fun AlbumGridCard(song: Song, onClick: () -> Unit) {
 }
 
 @Composable
-fun SongListCard(song: Song, onClick: () -> Unit) {
+fun SongListCard(
+    song: Song,
+    onClick: () -> Unit,
+    onAddToQueue: (() -> Unit)? = null
+) {
     val isGlass = LocalThemeStyle.current == AppThemeStyle.LIQUID_GLASS
     Card(
         modifier = Modifier
@@ -893,7 +1005,13 @@ fun SongListCard(song: Song, onClick: () -> Unit) {
                     Text(song.artist, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = MaterialTheme.colorScheme.outline)
+            if (onAddToQueue != null) {
+                IconButton(onClick = onAddToQueue) {
+                    Icon(Icons.Default.PlaylistAdd, contentDescription = "Thêm vào danh sách chờ", tint = MaterialTheme.colorScheme.primary)
+                }
+            } else {
+                Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = MaterialTheme.colorScheme.outline)
+            }
         }
     }
 }
@@ -907,14 +1025,55 @@ fun M3MiniPlayer(
     isResolving: Boolean,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onForceStop: () -> Unit,
     onClick: () -> Unit
 ) {
     val isGlass = LocalThemeStyle.current == AppThemeStyle.LIQUID_GLASS
+    var dragOffsetX by remember { mutableFloatStateOf(0f) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .height(58.dp)
+            .offset { IntOffset(dragOffsetX.roundToInt(), dragOffsetY.coerceAtLeast(0f).roundToInt()) }
             .clip(RoundedCornerShape(24.dp))
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        dragOffsetX += dragAmount.x
+                        dragOffsetY += dragAmount.y
+                    },
+                    onDragEnd = {
+                        val absX = abs(dragOffsetX)
+                        val absY = abs(dragOffsetY)
+                        val threshold = 65f
+
+                        if (dragOffsetY < -threshold) {
+                            // Vuốt từ dưới lên -> mở playback chi tiết
+                            onClick()
+                        } else if (dragOffsetY > threshold && dragOffsetY > absX) {
+                            // Vuốt từ trên xuống -> force stop và tắt hẳn bài đang phát và queue list
+                            onForceStop()
+                        } else if (dragOffsetX < -threshold) {
+                            // Vuốt sang trái -> skip next
+                            onNext()
+                        } else if (dragOffsetX > threshold) {
+                            // Vuốt sang phải -> skip previous
+                            onPrevious()
+                        }
+
+                        dragOffsetX = 0f
+                        dragOffsetY = 0f
+                    },
+                    onDragCancel = {
+                        dragOffsetX = 0f
+                        dragOffsetY = 0f
+                    }
+                )
+            }
             .clickable { onClick() },
         color = if (isGlass) Color(0xD9121720) else MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 6.dp,
@@ -956,6 +1115,12 @@ fun M3MiniPlayer(
     }
 }
 
+enum class FullPlayerTab {
+    NOW_PLAYING,
+    LYRICS,
+    QUEUE
+}
+
 @Composable
 fun M3FullScreenPlayer(
     currentSong: Song?,
@@ -979,12 +1144,30 @@ fun M3FullScreenPlayer(
     mediaController: MediaController?,
     onClose: () -> Unit,
     onPlayPause: () -> Unit,
-    onSeek: (Long) -> Unit
+    onSeek: (Long) -> Unit,
+    skipDurationSeconds: Int = 10,
+    songQueue: List<Song> = emptyList(),
+    onPlayQueueSong: (Song) -> Unit = {},
+    onRemoveFromQueue: (Int) -> Unit = {},
+    onClearQueue: () -> Unit = {},
+    onSkipNext: () -> Unit = {},
+    onSkipPrevious: () -> Unit = {}
 ) {
-    var isShowingLyrics by remember { mutableStateOf(false) }
+    var currentTab by remember { mutableStateOf(FullPlayerTab.NOW_PLAYING) }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showVolumeDialog by remember { mutableStateOf(false) }
     var showTimerDialog by remember { mutableStateOf(false) }
+
+    // Double-Tap to Skip Feedback State
+    var skipFeedbackText by remember { mutableStateOf<String?>(null) }
+    var skipFeedbackSide by remember { mutableIntStateOf(0) } // -1 for left, 1 for right
+
+    LaunchedEffect(skipFeedbackText) {
+        if (skipFeedbackText != null) {
+            delay(700)
+            skipFeedbackText = null
+        }
+    }
 
     val lyricsListState = rememberLazyListState()
 
@@ -995,8 +1178,8 @@ fun M3FullScreenPlayer(
         if (idx >= 0) idx else 0
     }
 
-    LaunchedEffect(activeLyricIndex, isShowingLyrics) {
-        if (isShowingLyrics && lyrics.isNotEmpty()) {
+    LaunchedEffect(activeLyricIndex, currentTab) {
+        if (currentTab == FullPlayerTab.LYRICS && lyrics.isNotEmpty()) {
             lyricsListState.animateScrollToItem((activeLyricIndex - 2).coerceAtLeast(0))
         }
     }
@@ -1083,100 +1266,367 @@ fun M3FullScreenPlayer(
                         }
                     }
                 } else {
-                    Text("ĐANG PHÁT", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.outline)
+                    Text(
+                        text = when (currentTab) {
+                            FullPlayerTab.NOW_PLAYING -> "ĐANG PHÁT"
+                            FullPlayerTab.LYRICS -> "LỜI BÀI HÁT"
+                            FullPlayerTab.QUEUE -> "DANH SÁCH CHỜ"
+                        },
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        color = MaterialTheme.colorScheme.outline
+                    )
                 }
 
-                IconButton(onClick = { isShowingLyrics = !isShowingLyrics }) {
-                    Icon(
-                        imageVector = if (isShowingLyrics) Icons.Default.MusicNote else Icons.Default.Lyrics,
-                        contentDescription = "Toggle Lyrics",
-                        tint = if (isShowingLyrics) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Queue Button with Badge
+                    IconButton(onClick = {
+                        currentTab = if (currentTab == FullPlayerTab.QUEUE) FullPlayerTab.NOW_PLAYING else FullPlayerTab.QUEUE
+                    }) {
+                        BadgedBox(
+                            badge = {
+                                if (songQueue.isNotEmpty()) {
+                                    Badge(containerColor = MaterialTheme.colorScheme.primary) {
+                                        Text("${songQueue.size}", fontSize = 9.sp)
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.QueueMusic,
+                                contentDescription = "Danh sách chờ",
+                                tint = if (currentTab == FullPlayerTab.QUEUE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    // Lyrics Button
+                    IconButton(onClick = {
+                        currentTab = if (currentTab == FullPlayerTab.LYRICS) FullPlayerTab.NOW_PLAYING else FullPlayerTab.LYRICS
+                    }) {
+                        Icon(
+                            imageVector = if (currentTab == FullPlayerTab.LYRICS) Icons.Default.MusicNote else Icons.Default.Lyrics,
+                            contentDescription = "Toggle Lyrics",
+                            tint = if (currentTab == FullPlayerTab.LYRICS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
 
-            // Middle Section: Toggle between Video Mode, Synced Karaoke Lyrics, or Big Album Art
+            // Middle Section: Switch between Queue, Synced Karaoke Lyrics, or Big Album Art with double-tap gesture
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(vertical = 12.dp),
+                    .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
-                if (isVideoMode) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(16f / 9f)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Color.Black),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AndroidView(
-                            factory = { ctx ->
-                                PlayerView(ctx).apply {
-                                    player = mediaController
-                                    useController = false
-                                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                } else {
-                    Crossfade(targetState = isShowingLyrics, label = "lyricsCrossfade") { showLyrics ->
-                        if (showLyrics) {
-                            if (lyrics.isEmpty()) {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Text("Đang tải hoặc chưa có lời bài hát đồng bộ...", color = MaterialTheme.colorScheme.outline, fontSize = 13.sp)
-                                }
-                            } else {
-                                LazyColumn(
-                                    state = lyricsListState,
-                                    modifier = Modifier.fillMaxSize(),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                                    contentPadding = PaddingValues(vertical = 40.dp)
+                when (currentTab) {
+                    FullPlayerTab.QUEUE -> {
+                        // Queue Song List (Optimized like YouTube & Spotify)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            // Section 1: Đang phát hiện tại
+                            Text(
+                                text = "ĐANG PHÁT HIỆN TẠI",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp).fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    items(lyrics.size) { index ->
-                                        val line = lyrics[index]
-                                        val isActive = index == activeLyricIndex
+                                    if (artworkUrl.isNotEmpty()) {
+                                        AsyncImage(
+                                            model = artworkUrl,
+                                            contentDescription = title,
+                                            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primary),
+                                            contentAlignment = Alignment.Center
+                                        ) { Text("♫", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold) }
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(artist, fontSize = 11.sp, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.primary
+                                    ) {
                                         Text(
-                                            text = line.text,
-                                            fontSize = if (isActive) 18.sp else 14.sp,
-                                            fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Normal,
-                                            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                                            textAlign = TextAlign.Center,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { onSeek(line.timestampMs) }
-                                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                                            text = "ĐANG PHÁT",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                                         )
                                     }
                                 }
                             }
-                        } else {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            // Section 2: Tiếp theo trong danh sách chờ
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                if (artworkUrl.isNotEmpty()) {
-                                    AsyncImage(
-                                        model = artworkUrl,
-                                        contentDescription = title,
+                                Text(
+                                    text = "TIẾP THEO (${songQueue.size} BÀI)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    letterSpacing = 1.sp
+                                )
+                                if (songQueue.isNotEmpty()) {
+                                    TextButton(
+                                        onClick = onClearQueue,
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                                    ) {
+                                        Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Xóa tất cả", fontSize = 11.sp, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            if (songQueue.isEmpty()) {
+                                Box(
+                                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.QueueMusic,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(48.dp),
+                                            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                                        )
+                                        Text("Danh sách chờ đang trống", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                                        Text(
+                                            "Chạm vào biểu tượng (+) ở danh sách bài hát để thêm vào hàng đợi phát.",
+                                            fontSize = 11.5.sp,
+                                            color = MaterialTheme.colorScheme.outline,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(horizontal = 24.dp)
+                                        )
+                                    }
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    itemsIndexed(songQueue) { idx, qSong ->
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .clickable { onPlayQueueSong(qSong) },
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(8.dp).fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "${idx + 1}",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.outline,
+                                                    modifier = Modifier.width(22.dp)
+                                                )
+                                                if (qSong.thumbnailUrl.isNotEmpty()) {
+                                                    AsyncImage(
+                                                        model = qSong.thumbnailUrl,
+                                                        contentDescription = qSong.title,
+                                                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)),
+                                                        contentScale = ContentScale.Crop
+                                                    )
+                                                } else {
+                                                    Box(
+                                                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                                        contentAlignment = Alignment.Center
+                                                    ) { Text("♫", fontSize = 16.sp) }
+                                                }
+                                                Spacer(modifier = Modifier.width(10.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(qSong.title, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    Text(qSong.artist, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                }
+                                                IconButton(
+                                                    onClick = { onRemoveFromQueue(idx) },
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Close, contentDescription = "Xóa khỏi danh sách chờ", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    FullPlayerTab.LYRICS -> {
+                        if (lyrics.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("Đang tải hoặc chưa có lời bài hát đồng bộ...", color = MaterialTheme.colorScheme.outline, fontSize = 13.sp)
+                            }
+                        } else {
+                            LazyColumn(
+                                state = lyricsListState,
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                                contentPadding = PaddingValues(vertical = 40.dp)
+                            ) {
+                                items(lyrics.size) { index ->
+                                    val line = lyrics[index]
+                                    val isActive = index == activeLyricIndex
+                                    Text(
+                                        text = line.text,
+                                        fontSize = if (isActive) 18.sp else 14.sp,
+                                        fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Normal,
+                                        color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                                        textAlign = TextAlign.Center,
                                         modifier = Modifier
-                                            .size(260.dp)
-                                            .clip(RoundedCornerShape(28.dp)),
-                                        contentScale = ContentScale.Crop
+                                            .fillMaxWidth()
+                                            .clickable { onSeek(line.timestampMs) }
+                                            .padding(horizontal = 16.dp, vertical = 4.dp)
                                     )
-                                } else {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(260.dp)
-                                            .clip(RoundedCornerShape(28.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                                        contentAlignment = Alignment.Center
-                                    ) { Text("🎸", fontSize = 80.sp) }
+                                }
+                            }
+                        }
+                    }
+                    FullPlayerTab.NOW_PLAYING -> {
+                        // Big Album Art or Video with Double Tap Gesture
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(skipDurationSeconds) {
+                                    detectTapGestures(
+                                        onDoubleTap = { tapOffset ->
+                                            val isLeft = tapOffset.x < size.width / 2
+                                            if (isLeft) {
+                                                val newPos = (currentPositionMs - skipDurationSeconds * 1000L).coerceAtLeast(0L)
+                                                onSeek(newPos)
+                                                skipFeedbackText = "-${skipDurationSeconds}s"
+                                                skipFeedbackSide = -1
+                                            } else {
+                                                val newPos = (currentPositionMs + skipDurationSeconds * 1000L).coerceAtMost(durationMs)
+                                                onSeek(newPos)
+                                                skipFeedbackText = "+${skipDurationSeconds}s"
+                                                skipFeedbackSide = 1
+                                            }
+                                        }
+                                    )
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isVideoMode) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(16f / 9f)
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(Color.Black),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AndroidView(
+                                        factory = { ctx ->
+                                            PlayerView(ctx).apply {
+                                                player = mediaController
+                                                useController = false
+                                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                            } else {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    if (artworkUrl.isNotEmpty()) {
+                                        AsyncImage(
+                                            model = artworkUrl,
+                                            contentDescription = title,
+                                            modifier = Modifier
+                                                .size(260.dp)
+                                                .clip(RoundedCornerShape(28.dp)),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(260.dp)
+                                                .clip(RoundedCornerShape(28.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                                            contentAlignment = Alignment.Center
+                                        ) { Text("🎸", fontSize = 80.sp) }
+                                    }
+                                }
+                            }
+
+                            // Animated Overlay for Double-Tap Skip Feedback
+                            if (skipFeedbackText != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 24.dp),
+                                    contentAlignment = if (skipFeedbackSide == -1) Alignment.CenterStart else Alignment.CenterEnd
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(24.dp),
+                                        color = Color.Black.copy(alpha = 0.82f),
+                                        border = BorderStroke(1.2.dp, Color.White.copy(alpha = 0.4f)),
+                                        tonalElevation = 8.dp
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (skipFeedbackSide == -1) Icons.Default.FastRewind else Icons.Default.FastForward,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Text(
+                                                text = skipFeedbackText ?: "",
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1278,10 +1728,10 @@ fun M3FullScreenPlayer(
                 }
             }
 
-            // Controls Cluster
+            // Controls Cluster (Previous, Play/Pause, Next)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = {}) { Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = MaterialTheme.colorScheme.outline) }
-                IconButton(onClick = {}) { Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurface) }
+                IconButton(onClick = onSkipPrevious) { Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurface) }
 
                 FilledTonalIconButton(
                     onClick = onPlayPause,
@@ -1291,24 +1741,51 @@ fun M3FullScreenPlayer(
                     Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", modifier = Modifier.size(32.dp))
                 }
 
-                IconButton(onClick = {}) { Icon(Icons.Default.SkipNext, contentDescription = "Next", modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurface) }
+                IconButton(onClick = onSkipNext) { Icon(Icons.Default.SkipNext, contentDescription = "Next", modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurface) }
                 IconButton(onClick = {}) { Icon(Icons.Default.Repeat, contentDescription = "Repeat", tint = MaterialTheme.colorScheme.outline) }
             }
 
-            // Bottom Bar to open Lyrics quickly
+            // Bottom Bar to switch views
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { isShowingLyrics = !isShowingLyrics },
+                    .clickable {
+                        currentTab = when (currentTab) {
+                            FullPlayerTab.NOW_PLAYING -> FullPlayerTab.LYRICS
+                            FullPlayerTab.LYRICS -> FullPlayerTab.QUEUE
+                            FullPlayerTab.QUEUE -> FullPlayerTab.NOW_PLAYING
+                        }
+                    },
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
             ) {
                 Row(modifier = Modifier.padding(12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column {
-                        Text(if (isShowingLyrics) "Chạm để quay lại Album Art" else "Chạm để xem Lời bài hát Karaoke (LRCLIB)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                        Text(if (lyrics.isNotEmpty()) "${lyrics.size} câu lời đã đồng bộ" else "Hỗ trợ lời chạy theo nhạc thời gian thực", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = when (currentTab) {
+                                FullPlayerTab.NOW_PLAYING -> "Chạm để xem Lời bài hát & Danh sách chờ"
+                                FullPlayerTab.LYRICS -> "Chạm để mở Danh sách chờ (${songQueue.size} bài)"
+                                FullPlayerTab.QUEUE -> "Chạm để quay lại giao diện Đang phát"
+                            },
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = when (currentTab) {
+                                FullPlayerTab.NOW_PLAYING -> if (lyrics.isNotEmpty()) "${lyrics.size} câu lời đồng bộ • Chạm đúp để tua ${skipDurationSeconds}s" else "Chạm đúp trái/phải để tua ${skipDurationSeconds}s"
+                                FullPlayerTab.LYRICS -> "Lời bài hát chạy theo thời gian thực"
+                                FullPlayerTab.QUEUE -> if (songQueue.isNotEmpty()) "${songQueue.size} bài tiếp theo trong hàng đợi" else "Hàng đợi trống"
+                            },
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
-                    Icon(if (isShowingLyrics) Icons.Default.MusicNote else Icons.Default.Lyrics, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Lyrics, contentDescription = null, tint = if (currentTab == FullPlayerTab.LYRICS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
+                        Icon(Icons.Default.QueueMusic, contentDescription = null, tint = if (currentTab == FullPlayerTab.QUEUE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
+                    }
                 }
             }
         }

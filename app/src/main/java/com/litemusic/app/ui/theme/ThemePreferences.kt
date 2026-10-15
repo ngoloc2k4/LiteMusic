@@ -60,4 +60,14 @@ object ThemePreferences {
     fun setDspEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_DSP_ENABLED, enabled).apply()
     }
+
+    private const val KEY_SKIP_DURATION = "pref_skip_duration"
+
+    fun getSkipDuration(context: Context): Int {
+        return getPrefs(context).getInt(KEY_SKIP_DURATION, 10)
+    }
+
+    fun setSkipDuration(context: Context, durationSeconds: Int) {
+        getPrefs(context).edit().putInt(KEY_SKIP_DURATION, durationSeconds).apply()
+    }
 }

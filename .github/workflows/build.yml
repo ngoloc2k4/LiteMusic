@@ -74,21 +74,31 @@ jobs:
             echo "Error: No APK found!"
             exit 1
           fi
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          DEST_NAME="LiteMusic-${SHORT_SHA}-release.apk"
-          cp "$APK_PATH" "$DEST_NAME"
-          # Also copy standard name for rolling release
+          # Use single standard filename for rolling beta release
           cp "$APK_PATH" "LiteMusic-beta.apk"
-          echo "apk_path=$DEST_NAME" >> $GITHUB_OUTPUT
-          echo "Found and prepared: $DEST_NAME"
+          echo "apk_path=LiteMusic-beta.apk" >> $GITHUB_OUTPUT
+          echo "Prepared LiteMusic-beta.apk successfully."
 
       - name: Upload Signed APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: LiteMusic-Release-APK
-          path: ${{ steps.prepare_artifact.outputs.apk_path }}
+          path: LiteMusic-beta.apk
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 14
+
+      - name: Clean Old Rolling Release Assets
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Checking and cleaning legacy assets from beta release..."
+          gh release view beta --json assets -q '.assets[].name' 2>/dev/null | while read -r asset; do
+            if [ -n "$asset" ] && [ "$asset" != "LiteMusic-beta.apk" ]; then
+              echo "Pruning legacy asset: $asset"
+              gh release delete-asset beta "$asset" -y || true
+            fi
+          done || true
 
       - name: Publish or Update Rolling Beta Release
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
@@ -100,8 +110,6 @@ jobs:
             Automated rolling release for latest commit: `${{ github.sha }}`.
             Download the pre-signed APK below to install or update directly.
           prerelease: true
-          files: |
-            LiteMusic-beta.apk
-            ${{ steps.prepare_artifact.outputs.apk_path }}
+          files: LiteMusic-beta.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

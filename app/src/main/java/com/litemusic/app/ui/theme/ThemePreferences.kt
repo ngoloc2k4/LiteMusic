@@ -62,6 +62,7 @@ object ThemePreferences {
     }
 
     private const val KEY_SKIP_DURATION = "pref_skip_duration"
+    private const val KEY_DEBUG_MODE = "pref_debug_mode"
 
     fun getSkipDuration(context: Context): Int {
         return getPrefs(context).getInt(KEY_SKIP_DURATION, 10)
@@ -70,4 +71,13 @@ object ThemePreferences {
     fun setSkipDuration(context: Context, durationSeconds: Int) {
         getPrefs(context).edit().putInt(KEY_SKIP_DURATION, durationSeconds).apply()
     }
+
+    fun isDebugMode(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_DEBUG_MODE, false)
+    }
+
+    fun setDebugMode(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_DEBUG_MODE, enabled).apply()
+    }
 }
+

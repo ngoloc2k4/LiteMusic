@@ -37,7 +37,12 @@ fun SettingsScreen(
     onDspToggle: (Boolean) -> Unit,
     onClearCache: () -> Unit,
     currentSkipDuration: Int = 10,
-    onSkipDurationChange: (Int) -> Unit = {}
+    onSkipDurationChange: (Int) -> Unit = {},
+    isDebugMode: Boolean = false,
+    onDebugModeToggle: (Boolean) -> Unit = {},
+    debugServerUrl: String = "http://localhost:8888",
+    onCopyLogcat: () -> Unit = {},
+    onClearLogcat: () -> Unit = {}
 ) {
     val isGlass = currentThemeStyle == AppThemeStyle.LIQUID_GLASS
 
@@ -46,6 +51,7 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(bottom = 100.dp, top = 8.dp)
     ) {
+
         // Header
         item {
             Column {
@@ -445,7 +451,109 @@ fun SettingsScreen(
             com.litemusic.app.feature.aimusic.ui.AiSettingsSection(isGlass = isGlass)
         }
 
-        // Section 7: Thông tin ứng dụng
+        // Section 7: Chế độ Debug & Nhà phát triển (Developer Console & Localhost HTTP Server)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isGlass) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow
+                ),
+                border = if (isGlass) BorderStroke(1.dp, GlassBorderDark) else CardDefaults.outlinedCardBorder()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "🛠️ Chế độ Debug & Logcat Hub",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Mở máy chủ HTTP nội bộ trên localhost để xem log trực tiếp & sao chép logcat",
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                        Switch(
+                            checked = isDebugMode,
+                            onCheckedChange = onDebugModeToggle
+                        )
+                    }
+
+                    if (isDebugMode) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text("🟢", fontSize = 10.sp)
+                                    Text(
+                                        text = "Web Dashboard Đang Chạy:",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Text(
+                                    text = debugServerUrl,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "Mở link trên trình duyệt để xem logcat thời gian thực, lọc lỗi hoặc gọi endpoint /raw.",
+                                    fontSize = 10.5.sp,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onCopyLogcat,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Sao chép Logcat", fontSize = 12.sp)
+                            }
+
+                            OutlinedButton(
+                                onClick = onClearLogcat,
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.6f)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                modifier = Modifier.weight(0.8f)
+                            ) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Xóa Log", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section 8: Thông tin ứng dụng
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),

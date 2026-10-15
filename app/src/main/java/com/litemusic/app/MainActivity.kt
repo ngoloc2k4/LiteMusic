@@ -71,9 +71,15 @@ import com.litemusic.app.feature.aimusic.domain.AiGenerationState
 import com.litemusic.app.feature.aimusic.domain.AiPlaylistGenerator
 import com.litemusic.app.feature.aimusic.domain.LocalHeuristicRanker
 import com.litemusic.app.feature.aimusic.ui.AiPlaylistPreviewDialog
-import com.litemusic.app.feature.aimusic.ui.AiSearchTile
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import com.litemusic.app.core.debug.DebugLogServer
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -90,16 +96,22 @@ class MainActivity : ComponentActivity() {
 
     private var activeLyrics by mutableStateOf<List<LyricLine>>(emptyList())
     private var isResolvingStream by mutableStateOf(false)
+    private var playJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         initMediaController()
+
+        if (ThemePreferences.isDebugMode(this)) {
+            DebugLogServer.start(lifecycleScope)
+        }
 
         setContent {
             var themeMode by remember { mutableStateOf(ThemePreferences.getThemeMode(this)) }
             var colorPalette by remember { mutableStateOf(ThemePreferences.getColorPalette(this)) }
             var themeStyle by remember { mutableStateOf(ThemePreferences.getThemeStyle(this)) }
             var isDspEnabled by remember { mutableStateOf(ThemePreferences.getDspEnabled(this)) }
+            var isDebugMode by remember { mutableStateOf(ThemePreferences.isDebugMode(this)) }
 
             LiteMusicTheme(
                 themeMode = themeMode,
@@ -129,6 +141,24 @@ class MainActivity : ComponentActivity() {
                     onDspToggle = {
                         isDspEnabled = it
                         ThemePreferences.setDspEnabled(this, it)
+                    },
+                    isDebugMode = isDebugMode,
+                    onDebugModeToggle = { enabled ->
+                        isDebugMode = enabled
+                        ThemePreferences.setDebugMode(this, enabled)
+                        if (enabled) {
+                            DebugLogServer.start(lifecycleScope)
+                        } else {
+                            DebugLogServer.stop()
+                        }
+                    },
+                    debugServerUrl = DebugLogServer.getLocalUrl(),
+                    onCopyLogcat = {
+                        DebugLogServer.copyLogcatToClipboard(this)
+                    },
+                    onClearLogcat = {
+                        DebugLogServer.clearLogcat()
+                        Toast.makeText(this, "Đã xóa sạch bộ đệm Logcat!", Toast.LENGTH_SHORT).show()
                     },
                     onClearCache = {
                         try {
@@ -168,9 +198,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun playSong(song: Song, asVideo: Boolean = false) {
-        currentPlayingSong = song
         val controller = mediaController ?: return
-        lifecycleScope.launch {
+
+        // Cancel any in-flight stream resolution to prevent race conditions & interleaving
+        playJob?.cancel()
+
+        // Preserve current playback position if switching mode for the same song
+        val isSameSong = (currentPlayingSong?.id == song.id && controller.currentMediaItem != null)
+        val curPos = if (isSameSong) controller.currentPosition else 0L
+
+        currentPlayingSong = song
+
+        playJob = lifecycleScope.launch {
             isResolvingStream = true
 
             // Fetch synced lyrics in parallel
@@ -180,19 +219,19 @@ class MainActivity : ComponentActivity() {
 
             // Resolve real playable stream URL from YouTube Opus / Video MP4 / SoundCloud / Spotify Bridge
             val url = if (asVideo && (song.source == AudioSource.YOUTUBE_MUSIC || song.source == AudioSource.YOUTUBE_VIDEO)) {
-                song.videoUrl ?: ytResolver.resolveVideoStreamUrl(song) ?: ytResolver.resolveStreamUrl(song)
+                song.videoUrl ?: ytResolver.resolveVideoStreamUrl(song)?.also { song.videoUrl = it }
+                    ?: ytResolver.resolveStreamUrl(song)
             } else {
                 song.streamUrl ?: when (song.source) {
-                    AudioSource.YOUTUBE_MUSIC, AudioSource.YOUTUBE_VIDEO -> ytResolver.resolveStreamUrl(song)
-                    AudioSource.SOUNDCLOUD -> scResolver.resolveStreamUrl(song)
-                    AudioSource.SPOTIFY -> spotifyBridge.resolveTrackToPlayableStream(song)
+                    AudioSource.YOUTUBE_MUSIC, AudioSource.YOUTUBE_VIDEO -> ytResolver.resolveStreamUrl(song)?.also { song.streamUrl = it }
+                    AudioSource.SOUNDCLOUD -> scResolver.resolveStreamUrl(song)?.also { song.streamUrl = it }
+                    AudioSource.SPOTIFY -> spotifyBridge.resolveTrackToPlayableStream(song)?.also { song.streamUrl = it }
                 }
             }
 
             isResolvingStream = false
 
             if (url != null) {
-                val curPos = controller.currentPosition
                 val mediaItem = MediaItem.Builder()
                     .setUri(Uri.parse(url))
                     .setMediaMetadata(
@@ -205,7 +244,7 @@ class MainActivity : ComponentActivity() {
                     .build()
                 controller.setMediaItem(mediaItem)
                 controller.prepare()
-                if (asVideo && curPos > 0) {
+                if (isSameSong && curPos > 0) {
                     controller.seekTo(curPos)
                 }
                 controller.play()
@@ -218,6 +257,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        DebugLogServer.stop()
         controllerFuture?.let { MediaController.releaseFuture(it) }
         super.onDestroy()
     }
@@ -241,7 +281,12 @@ fun MainAppScreen(
     onPlaySong: (Song, Boolean) -> Unit,
     onSearch: suspend (String, AudioSource) -> List<Song>,
     onSeek: (Long) -> Unit,
-    currentSong: Song? = null
+    currentSong: Song? = null,
+    isDebugMode: Boolean = false,
+    onDebugModeToggle: (Boolean) -> Unit = {},
+    debugServerUrl: String = "http://localhost:8888",
+    onCopyLogcat: () -> Unit = {},
+    onClearLogcat: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -479,7 +524,12 @@ fun MainAppScreen(
                             onSkipDurationChange = { newSec ->
                                 skipDurationSeconds = newSec
                                 ThemePreferences.setSkipDuration(context, newSec)
-                            }
+                            },
+                            isDebugMode = isDebugMode,
+                            onDebugModeToggle = onDebugModeToggle,
+                            debugServerUrl = debugServerUrl,
+                            onCopyLogcat = onCopyLogcat,
+                            onClearLogcat = onClearLogcat
                         )
                         if (currentTitle.isNotEmpty()) {
                             Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)) {
@@ -1225,14 +1275,19 @@ fun M3FullScreenPlayer(
     var showVolumeDialog by remember { mutableStateOf(false) }
     var showTimerDialog by remember { mutableStateOf(false) }
 
-    // Double-Tap to Skip Feedback State
-    var skipFeedbackText by remember { mutableStateOf<String?>(null) }
+    // Double-Tap to Skip Feedback State with Accumulator and Auto-reset
     var skipFeedbackSide by remember { mutableIntStateOf(0) } // -1 for left, 1 for right
+    var accumulatedSkipSeconds by remember { mutableIntStateOf(0) }
+    var skipAnimTrigger by remember { mutableIntStateOf(0) }
+    var lastDoubleTapTime by remember { mutableLongStateOf(0L) }
+    var pendingSeekTargetMs by remember { mutableLongStateOf(-1L) }
 
-    LaunchedEffect(skipFeedbackText) {
-        if (skipFeedbackText != null) {
-            delay(700)
-            skipFeedbackText = null
+    LaunchedEffect(skipAnimTrigger) {
+        if (skipAnimTrigger > 0) {
+            delay(850)
+            accumulatedSkipSeconds = 0
+            skipFeedbackSide = 0
+            pendingSeekTargetMs = -1L
         }
     }
 
@@ -1595,21 +1650,31 @@ fun M3FullScreenPlayer(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .pointerInput(skipDurationSeconds) {
+                                .pointerInput(skipDurationSeconds, currentPositionMs, durationMs) {
                                     detectTapGestures(
                                         onDoubleTap = { tapOffset ->
+                                            val now = System.currentTimeMillis()
                                             val isLeft = tapOffset.x < size.width / 2
-                                            if (isLeft) {
-                                                val newPos = (currentPositionMs - skipDurationSeconds * 1000L).coerceAtLeast(0L)
-                                                onSeek(newPos)
-                                                skipFeedbackText = "-${skipDurationSeconds}s"
-                                                skipFeedbackSide = -1
+                                            val side = if (isLeft) -1 else 1
+
+                                            // Accumulate skip seconds if consecutive taps occur in same direction within 900ms
+                                            if (side == skipFeedbackSide && (now - lastDoubleTapTime) < 900L) {
+                                                accumulatedSkipSeconds += skipDurationSeconds
                                             } else {
-                                                val newPos = (currentPositionMs + skipDurationSeconds * 1000L).coerceAtMost(durationMs)
-                                                onSeek(newPos)
-                                                skipFeedbackText = "+${skipDurationSeconds}s"
-                                                skipFeedbackSide = 1
+                                                accumulatedSkipSeconds = skipDurationSeconds
+                                                skipFeedbackSide = side
                                             }
+                                            lastDoubleTapTime = now
+
+                                            val basePos = if (pendingSeekTargetMs >= 0) pendingSeekTargetMs else currentPositionMs
+                                            val targetPos = if (isLeft) {
+                                                (basePos - skipDurationSeconds * 1000L).coerceAtLeast(0L)
+                                            } else {
+                                                (basePos + skipDurationSeconds * 1000L).coerceAtMost(durationMs)
+                                            }
+                                            pendingSeekTargetMs = targetPos
+                                            onSeek(targetPos)
+                                            skipAnimTrigger++
                                         }
                                     )
                                 },
@@ -1661,8 +1726,12 @@ fun M3FullScreenPlayer(
                                 }
                             }
 
-                            // Animated Overlay for Double-Tap Skip Feedback
-                            if (skipFeedbackText != null) {
+                            // Animated Overlay for Double-Tap Skip Feedback with smooth entrance/exit & badge
+                            AnimatedVisibility(
+                                visible = accumulatedSkipSeconds > 0 && skipFeedbackSide != 0,
+                                enter = fadeIn(tween(120)) + scaleIn(initialScale = 0.8f),
+                                exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.8f)
+                            ) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
@@ -1671,26 +1740,26 @@ fun M3FullScreenPlayer(
                                 ) {
                                     Surface(
                                         shape = RoundedCornerShape(24.dp),
-                                        color = Color.Black.copy(alpha = 0.82f),
-                                        border = BorderStroke(1.2.dp, Color.White.copy(alpha = 0.4f)),
+                                        color = Color.Black.copy(alpha = 0.85f),
+                                        border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)),
                                         tonalElevation = 8.dp
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             Icon(
                                                 imageVector = if (skipFeedbackSide == -1) Icons.Default.FastRewind else Icons.Default.FastForward,
                                                 contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(20.dp)
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(22.dp)
                                             )
                                             Text(
-                                                text = skipFeedbackText ?: "",
+                                                text = "${if (skipFeedbackSide == -1) "-" else "+"}${accumulatedSkipSeconds}s",
                                                 color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 15.sp
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 16.sp
                                             )
                                         }
                                     }

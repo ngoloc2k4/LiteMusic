@@ -37,11 +37,11 @@ class LrcLibClient(
         val cacheKey = "${trackName.trim().lowercase()}__${artistName.trim().lowercase()}"
         lyricsCache[cacheKey]?.let { return@withContext it }
 
-        val cleanTrack = cleanTitle(trackName, artistName)
         val cleanArt = cleanArtist(artistName)
+        val cleanTrack = cleanTitle(trackName, cleanArt)
 
-        // Tier 1: LRCLIB with cleaned title & artist
-        var result = fetchLrcLib(cleanTrack, cleanArt)
+        // Tier 1: LRCLIB with cleaned title & artist & optional duration
+        var result = fetchLrcLib(cleanTrack, cleanArt, durationSeconds)
         if (result.isNotEmpty()) {
             lyricsCache[cacheKey] = result
             return@withContext result
@@ -49,21 +49,30 @@ class LrcLibClient(
 
         // Tier 2: LRCLIB with raw track and clean artist
         if (cleanTrack != trackName) {
-            result = fetchLrcLib(trackName, cleanArt)
+            result = fetchLrcLib(trackName, cleanArt, durationSeconds)
             if (result.isNotEmpty()) {
                 lyricsCache[cacheKey] = result
                 return@withContext result
             }
         }
 
-        // Tier 3: Lyrics.ovh fallback (excellent for Vietnamese & international songs)
+        // Tier 3: Lyrics.ovh fallback (clean artist & clean track)
         result = fetchLyricsOvh(cleanArt, cleanTrack, durationSeconds)
         if (result.isNotEmpty()) {
             lyricsCache[cacheKey] = result
             return@withContext result
         }
 
-        // Tier 4: Karalyr mirror fallback
+        // Tier 4: Lyrics.ovh with raw artist & track
+        if (cleanTrack != trackName || cleanArt != artistName) {
+            result = fetchLyricsOvh(cleanArtist(artistName), trackName, durationSeconds)
+            if (result.isNotEmpty()) {
+                lyricsCache[cacheKey] = result
+                return@withContext result
+            }
+        }
+
+        // Tier 5: Karalyr mirror fallback
         result = fetchKaralyr(cleanTrack, cleanArt)
         if (result.isNotEmpty()) {
             lyricsCache[cacheKey] = result
@@ -73,20 +82,46 @@ class LrcLibClient(
         emptyList()
     }
 
-    private val browserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    private val lrclibUserAgent = "LiteMusic-v2.0-(https://github.com/LiteMusic)"
+    private val browserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
-    private fun fetchLrcLib(title: String, artist: String): List<LyricLine> {
+    private fun fetchLrcLib(title: String, artist: String, durationSeconds: Long = 0L): List<LyricLine> {
         if (title.isBlank()) return emptyList()
 
-        // 1. Exact match attempt
-        try {
-            val encTrack = URLEncoder.encode(title, "UTF-8")
-            val encArtist = URLEncoder.encode(artist, "UTF-8")
-            val url = "https://lrclib.net/api/get?track_name=$encTrack&artist_name=$encArtist"
+        val encTrack = try { URLEncoder.encode(title, "UTF-8") } catch (_: Exception) { title }
+        val encArtist = try { URLEncoder.encode(artist, "UTF-8") } catch (_: Exception) { artist }
 
+        // 1. Exact match with duration (if provided)
+        if (durationSeconds > 0) {
+            try {
+                val url = "https://lrclib.net/api/get?track_name=$encTrack&artist_name=$encArtist&duration=$durationSeconds"
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", lrclibUserAgent)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: ""
+                    if (body.isNotEmpty()) {
+                        val json = JSONObject(body)
+                        val synced = json.optString("syncedLyrics", "")
+                        if (synced.isNotEmpty()) return parseLrc(synced)
+                        val plain = json.optString("plainLyrics", "")
+                        if (plain.isNotEmpty()) return parsePlain(plain, durationSeconds)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(tag, "LRCLIB get with duration error for $title - $artist: ${e.message}")
+            }
+        }
+
+        // 2. Exact match without duration
+        try {
+            val url = "https://lrclib.net/api/get?track_name=$encTrack&artist_name=$encArtist"
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", browserUserAgent)
+                .header("User-Agent", lrclibUserAgent)
                 .build()
 
             val response = client.newCall(request).execute()
@@ -97,14 +132,14 @@ class LrcLibClient(
                     val synced = json.optString("syncedLyrics", "")
                     if (synced.isNotEmpty()) return parseLrc(synced)
                     val plain = json.optString("plainLyrics", "")
-                    if (plain.isNotEmpty()) return parsePlain(plain, 0L)
+                    if (plain.isNotEmpty()) return parsePlain(plain, durationSeconds)
                 }
             }
         } catch (e: Exception) {
             Log.w(tag, "LRCLIB get error for $title - $artist: ${e.message}")
         }
 
-        // 2. Flexible search by track & artist
+        // 3. Flexible search by track & artist
         try {
             val encTrack = URLEncoder.encode(title, "UTF-8")
             val encArtist = URLEncoder.encode(artist, "UTF-8")
@@ -112,7 +147,7 @@ class LrcLibClient(
 
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", browserUserAgent)
+                .header("User-Agent", lrclibUserAgent)
                 .build()
 
             val response = client.newCall(request).execute()
@@ -125,7 +160,7 @@ class LrcLibClient(
             Log.w(tag, "LRCLIB search track+artist error: ${e.message}")
         }
 
-        // 3. Search by combined query (title + artist)
+        // 4. Search by combined query (title + artist)
         try {
             val combined = "$title $artist".trim()
             val encQuery = URLEncoder.encode(combined, "UTF-8")
@@ -133,7 +168,7 @@ class LrcLibClient(
 
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", browserUserAgent)
+                .header("User-Agent", lrclibUserAgent)
                 .build()
 
             val response = client.newCall(request).execute()
@@ -146,7 +181,7 @@ class LrcLibClient(
             Log.w(tag, "LRCLIB search query error: ${e.message}")
         }
 
-        // 4. Search by title alone if title has multiple words
+        // 5. Search by title alone if title has multiple words
         if (title.contains(" ")) {
             try {
                 val encQuery = URLEncoder.encode(title.trim(), "UTF-8")
@@ -154,7 +189,7 @@ class LrcLibClient(
 
                 val request = Request.Builder()
                     .url(url)
-                    .header("User-Agent", browserUserAgent)
+                    .header("User-Agent", lrclibUserAgent)
                     .build()
 
                 val response = client.newCall(request).execute()
@@ -325,12 +360,22 @@ class LrcLibClient(
     }
 
     fun cleanArtist(rawArtist: String): String {
-        return rawArtist
+        var a = rawArtist
+        // Strip bullet/middle-dot and duration/extra info: e.g. " • 3:45", " · 4:12"
+        if (a.contains("•")) {
+            a = a.substringBefore("•").trim()
+        }
+        if (a.contains("·")) {
+            a = a.substringBefore("·").trim()
+        }
+        return a
             .replace(" - Topic", "", ignoreCase = true)
             .replace(" Official Channel", "", ignoreCase = true)
             .replace(" Official", "", ignoreCase = true)
+            .replace(" Channel", "", ignoreCase = true)
             .replace("VEVO", "", ignoreCase = true)
             .replace(" Records", "", ignoreCase = true)
+            .replace(Regex("""^[\|\-\:\s]+|[\|\-\:\s]+$"""), "")
             .trim()
     }
 }

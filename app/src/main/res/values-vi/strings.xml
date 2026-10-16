@@ -293,4 +293,5 @@
     <string name="block_artist">Chặn nghệ sĩ</string>
     <string name="manage_cache">Dữ liệu &amp; Bộ nhớ</string>
     <string name="home_play_all">Phát tất cả</string>
+    <string name="source_all">Tất cả</string>
 </resources>

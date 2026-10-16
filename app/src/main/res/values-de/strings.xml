@@ -293,4 +293,5 @@
     <string name="block_artist">Künstler blockieren</string>
     <string name="manage_cache">Speicher &amp; Cache</string>
     <string name="home_play_all">Alle abspielen</string>
+    <string name="source_all">Alle</string>
 </resources>

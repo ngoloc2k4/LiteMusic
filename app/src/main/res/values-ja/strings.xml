@@ -293,4 +293,5 @@
     <string name="block_artist">アーティストをブロック</string>
     <string name="manage_cache">ストレージとキャッシュ</string>
     <string name="home_play_all">すべて再生</string>
+    <string name="source_all">すべて</string>
 </resources>

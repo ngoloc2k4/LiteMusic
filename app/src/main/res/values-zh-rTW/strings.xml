@@ -293,4 +293,5 @@
     <string name="block_artist">封鎖演出者</string>
     <string name="manage_cache">儲存空間與快取</string>
     <string name="home_play_all">播放全部</string>
+    <string name="source_all">全部</string>
 </resources>

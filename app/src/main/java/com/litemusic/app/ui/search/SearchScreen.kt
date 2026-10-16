@@ -128,6 +128,7 @@ fun SearchScreen(
         // Source Filter Chips
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             val sources = listOf(
+                AudioSource.ALL to ("🌟 " + stringResource(R.string.source_all)),
                 AudioSource.YOUTUBE_MUSIC to "🎵 YouTube Music",
                 AudioSource.YOUTUBE_VIDEO to "🎬 YouTube Video",
                 AudioSource.SOUNDCLOUD to "☁️ SoundCloud",
@@ -435,15 +436,21 @@ fun TopResultHeroCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = song.artist,
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.outline,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        SourceBadge(song.source)
+                        Text(
+                            text = song.artist,
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.outline,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
 
                 IconButton(onClick = onToggleFav) {
@@ -569,13 +576,20 @@ fun SearchSongCard(
                     String.format("%02d:%02d", m, s)
                 } else ""
                 val subtitle = if (durationText.isNotEmpty()) "${song.artist} • $durationText" else song.artist
-                Text(
-                    text = subtitle,
-                    fontSize = 11.5.sp,
-                    color = MaterialTheme.colorScheme.outline,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    SourceBadge(song.source)
+                    Text(
+                        text = subtitle,
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.outline,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
 
             // Favorite button
@@ -622,6 +636,32 @@ fun SearchSongCard(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun SourceBadge(source: AudioSource, modifier: Modifier = Modifier) {
+    val (icon, label, badgeColor) = when (source) {
+        AudioSource.YOUTUBE_MUSIC -> Triple("🎵", "Music", Color(0xFFEF4444))
+        AudioSource.YOUTUBE_VIDEO -> Triple("🎬", "Video", Color(0xFFF97316))
+        AudioSource.SOUNDCLOUD -> Triple("☁️", "SoundCloud", Color(0xFFFF5500))
+        AudioSource.SPOTIFY -> Triple("🟢", "Spotify", Color(0xFF1DB954))
+        AudioSource.ALL -> Triple("🌟", "All", Color(0xFF3B82F6))
+    }
+    Surface(
+        shape = RoundedCornerShape(5.dp),
+        color = badgeColor.copy(alpha = 0.12f),
+        border = BorderStroke(0.5.dp, badgeColor.copy(alpha = 0.35f)),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(icon, fontSize = 8.5.sp)
+            Text(label, fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = badgeColor)
         }
     }
 }

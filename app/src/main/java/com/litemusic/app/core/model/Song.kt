@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class AudioSource {
+    ALL,
     YOUTUBE_MUSIC,
     YOUTUBE_VIDEO,
     SOUNDCLOUD,

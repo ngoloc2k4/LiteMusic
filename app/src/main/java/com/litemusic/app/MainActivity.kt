@@ -110,6 +110,9 @@ import com.litemusic.app.core.debug.DebugLogServer
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -237,10 +240,103 @@ class MainActivity : ComponentActivity() {
 
     private suspend fun searchSongs(query: String, source: AudioSource): List<Song> {
         return when (source) {
+            AudioSource.ALL -> searchAllSources(query)
             AudioSource.YOUTUBE_MUSIC -> ytResolver.search(query)
             AudioSource.YOUTUBE_VIDEO -> ytResolver.searchRegularVideos(query)
             AudioSource.SOUNDCLOUD -> scResolver.search(query)
             AudioSource.SPOTIFY -> spotifyBridge.fetchPlaylistTracks(query)
+        }
+    }
+
+    private suspend fun searchAllSources(query: String): List<Song> = withContext(Dispatchers.IO) {
+        val q = query.trim()
+        if (q.isBlank()) return@withContext emptyList()
+
+        coroutineScope {
+            val ytMusicDeferred = async { runCatching { ytResolver.search(q) }.getOrDefault(emptyList()) }
+            val ytVideoDeferred = async { runCatching { ytResolver.searchRegularVideos(q) }.getOrDefault(emptyList()) }
+            val scDeferred = async { runCatching { scResolver.search(q) }.getOrDefault(emptyList()) }
+            val spotifyDeferred = async { runCatching { spotifyBridge.fetchPlaylistTracks(q) }.getOrDefault(emptyList()) }
+
+            val results = awaitAll(ytMusicDeferred, ytVideoDeferred, scDeferred, spotifyDeferred)
+            val ytMusic = results[0]
+            val ytVideo = results[1]
+            val sc = results[2]
+            val spotify = results[3]
+
+            val combined = mutableListOf<Song>()
+            combined.addAll(ytMusic)
+            combined.addAll(ytVideo)
+            combined.addAll(sc)
+            combined.addAll(spotify)
+
+            if (combined.isEmpty()) return@coroutineScope emptyList()
+
+            fun normalizeKey(song: Song): String {
+                val cleanTitle = song.title.lowercase()
+                    .replace(Regex("""[\(\[\{].*?[\)\]\}]"""), "")
+                    .replace(Regex("""[^a-z0-9\u00C0-\u1EF9]"""), "")
+                    .trim()
+                val cleanArtist = song.artist.lowercase()
+                    .substringBefore("•")
+                    .substringBefore("·")
+                    .replace(Regex("""[^a-z0-9\u00C0-\u1EF9]"""), "")
+                    .trim()
+                return "${cleanTitle}___$cleanArtist"
+            }
+
+            fun calculateScore(song: Song): Int {
+                var score = 0
+                val qLower = q.lowercase()
+                val titleLower = song.title.lowercase()
+                val artistLower = song.artist.lowercase()
+
+                if (titleLower == qLower) {
+                    score += 120
+                } else if (titleLower.startsWith(qLower)) {
+                    score += 70
+                } else if (titleLower.contains(qLower)) {
+                    score += 45
+                }
+
+                if (artistLower.contains(qLower)) {
+                    score += 35
+                }
+
+                val qWords = qLower.split(Regex("""\s+""")).filter { it.length > 1 }
+                for (word in qWords) {
+                    if (titleLower.contains(word)) score += 15
+                    if (artistLower.contains(word)) score += 10
+                }
+
+                when (song.source) {
+                    AudioSource.YOUTUBE_MUSIC -> score += 12
+                    AudioSource.YOUTUBE_VIDEO -> score += 8
+                    AudioSource.SPOTIFY -> score += 6
+                    AudioSource.SOUNDCLOUD -> score += 5
+                    else -> {}
+                }
+
+                return score
+            }
+
+            val sorted = combined.sortedByDescending { calculateScore(it) }
+            val deduped = mutableListOf<Song>()
+            val seenKeys = mutableSetOf<String>()
+
+            for (song in sorted) {
+                val key = normalizeKey(song)
+                if (key.length > 3) {
+                    if (!seenKeys.contains(key)) {
+                        seenKeys.add(key)
+                        deduped.add(song)
+                    }
+                } else {
+                    deduped.add(song)
+                }
+            }
+
+            deduped
         }
     }
 
@@ -395,7 +491,7 @@ fun MainAppScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var searchQuery by remember { mutableStateOf("") }
-    var selectedSource by remember { mutableStateOf(AudioSource.YOUTUBE_MUSIC) }
+    var selectedSource by remember { mutableStateOf(AudioSource.ALL) }
     var isPlayerSheetOpen by remember { mutableStateOf(false) }
     var showHomeSearchDialog by remember { mutableStateOf(false) }
 

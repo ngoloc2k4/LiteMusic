@@ -31,12 +31,52 @@
     <string name="library_empty_recent">No recently played tracks.</string>
     <string name="library_empty_blocklist">No blocked tracks or artists.</string>
 
-    <!-- Actions -->
+    <!-- Actions & Queue -->
     <string name="add_to_queue">Add to Queue</string>
     <string name="block_song">Block this track</string>
     <string name="block_artist">Block this artist</string>
     <string name="unblock">Unblock</string>
     <string name="clear_cache">Clear Cache</string>
     <string name="infinite_playback">Infinite Playback</string>
+    <string name="refresh_queue">Refresh Queue</string>
+    <string name="recommend_playlist_ai">Recommend with AI</string>
+    <string name="auto_add_related">Auto-add related songs</string>
+    <string name="auto_add_related_desc">Append related songs to queue when opening a single track</string>
+
+    <!-- Search -->
+    <string name="search_hint">Search songs, artists, playlists...</string>
+    <string name="search_placeholder">Type song name or YouTube link...</string>
+    <string name="quick_search">Quick Search</string>
+    <string name="search_cancel">Cancel</string>
+
+    <!-- Settings & Language -->
+    <string name="language">Language</string>
+    <string name="select_language">Select App Language</string>
+    <string name="language_system">System Default</string>
+    <string name="language_en">English</string>
+    <string name="language_vi">Tiếng Việt</string>
+    <string name="language_ja">日本語</string>
+    <string name="language_ko">한국어</string>
+    <string name="language_zh_cn">简体中文</string>
+    <string name="language_zh_tw">繁體中文</string>
+    <string name="language_fr">Français</string>
+    <string name="language_de">Deutsch</string>
+    <string name="language_it">Italiano</string>
+    <string name="language_es">Español</string>
+    <string name="language_pt">Português</string>
+    <string name="language_ru">Русский</string>
+    <string name="language_ar">العربية</string>
+    <string name="language_th">ไทย</string>
+    <string name="language_in">Bahasa Indonesia</string>
+    <string name="language_hi">हिन्दी</string>
+    <string name="language_tr">Türkçe</string>
+    <string name="language_pl">Polski</string>
+    <string name="language_nl">Nederlands</string>
+    <string name="language_uk">Українська</string>
+    <string name="language_sv">Svenska</string>
+    <string name="manage_cache">Cache Management</string>
+    <string name="max_cache_size">Max Cache Size</string>
+    <string name="theme_and_appearance">Theme &amp; Appearance</string>
     <string name="crowdin_contribute">Contribute translations via Crowdin</string>
+    <string name="crowdin_desc">Help translate LiteMusic into your native language</string>
 </resources>

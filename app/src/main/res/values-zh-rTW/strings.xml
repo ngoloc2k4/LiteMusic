@@ -288,4 +288,9 @@
     <string name="ai_settings_cache_auto">3 天自動快取</string>
     <string name="ai_settings_fallback_title">自動後備本地演算法</string>
     <string name="ai_settings_fallback_desc">未配置 API Key 或額度用盡時，自動使用本地演算法生成歌單。</string>
+
+    <string name="block_song">封鎖此歌曲</string>
+    <string name="block_artist">封鎖演出者</string>
+    <string name="manage_cache">儲存空間與快取</string>
+    <string name="home_play_all">播放全部</string>
 </resources>

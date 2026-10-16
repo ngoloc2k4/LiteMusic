@@ -288,4 +288,9 @@
     <string name="ai_settings_cache_auto">3日間自動キャッシュ</string>
     <string name="ai_settings_fallback_title">ローカルアルゴリズムへの自動フォールバック</string>
     <string name="ai_settings_fallback_desc">APIキー未設定やクォータ超過時に端末内でプレイリストを自動生成します。</string>
+
+    <string name="block_song">この曲をブロック</string>
+    <string name="block_artist">アーティストをブロック</string>
+    <string name="manage_cache">ストレージとキャッシュ</string>
+    <string name="home_play_all">すべて再生</string>
 </resources>

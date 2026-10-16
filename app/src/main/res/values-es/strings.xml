@@ -288,4 +288,9 @@
     <string name="ai_settings_cache_auto">Caché automática de 3 días</string>
     <string name="ai_settings_fallback_title">Fallback automático a algoritmo local</string>
     <string name="ai_settings_fallback_desc">Cuando no hay clave API o se agota la cuota, genera playlists localmente.</string>
+
+    <string name="block_song">Bloquear esta canción</string>
+    <string name="block_artist">Bloquear artista</string>
+    <string name="manage_cache">Almacenamiento y caché</string>
+    <string name="home_play_all">Reproducir todo</string>
 </resources>

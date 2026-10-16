@@ -288,4 +288,9 @@
     <string name="ai_settings_cache_auto">3일 자동 캐시</string>
     <string name="ai_settings_fallback_title">로컬 알고리즘 자동 폴백</string>
     <string name="ai_settings_fallback_desc">API 키가 없거나 할당량 초과 시 로컬에서 플레이리스트를 생성합니다.</string>
+
+    <string name="block_song">이 곡 차단</string>
+    <string name="block_artist">아티스트 차단</string>
+    <string name="manage_cache">저장공간 및 캐시</string>
+    <string name="home_play_all">모두 재생</string>
 </resources>

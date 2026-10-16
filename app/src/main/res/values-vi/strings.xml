@@ -288,4 +288,9 @@
     <string name="ai_settings_cache_auto">Cache 3 ngày tự động</string>
     <string name="ai_settings_fallback_title">Tự động fallback thuật toán cục bộ</string>
     <string name="ai_settings_fallback_desc">Khi không có API Key hoặc hết quota, tự động tạo playlist trên máy.</string>
+
+    <string name="block_song">Chặn bài hát này</string>
+    <string name="block_artist">Chặn nghệ sĩ</string>
+    <string name="manage_cache">Dữ liệu &amp; Bộ nhớ</string>
+    <string name="home_play_all">Phát tất cả</string>
 </resources>

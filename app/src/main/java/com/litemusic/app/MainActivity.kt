@@ -920,7 +920,7 @@ fun MainAppScreen(
                                                         modifier = Modifier.clickable { selectedMoodFilter = mood }
                                                     ) {
                                                         Text(
-                                                            text = mood,
+                                                            text = stringResource(mood.titleRes),
                                                             fontSize = 12.sp,
                                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                                             color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,

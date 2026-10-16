@@ -288,4 +288,9 @@
     <string name="ai_settings_cache_auto">3 天自动缓存</string>
     <string name="ai_settings_fallback_title">自动回退本地算法</string>
     <string name="ai_settings_fallback_desc">未配置 API Key 或配额用尽时，自动使用本地算法生成歌单。</string>
+
+    <string name="block_song">屏蔽此歌曲</string>
+    <string name="block_artist">屏蔽艺术家</string>
+    <string name="manage_cache">存储与缓存</string>
+    <string name="home_play_all">播放全部</string>
 </resources>

@@ -82,6 +82,7 @@ fun SearchScreen(
     var recentSearches by remember {
         mutableStateOf(listOf("Top Trending", "Lo-fi Chill", "Acoustic", "EDM Remix"))
     }
+    val categories = getLocalizedCategories()
 
     Column(
         modifier = Modifier
@@ -192,7 +193,6 @@ fun SearchScreen(
                 }
 
                 // 2-column grid of categories
-                val categories = getLocalizedCategories()
                 items(categories.chunked(2)) { pair ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),

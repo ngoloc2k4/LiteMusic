@@ -109,7 +109,7 @@ fun SearchScreen(
                     IconButton(onClick = onAiSearchClick) {
                         Icon(
                             Icons.Default.AutoAwesome,
-                            contentDescription = stringResource(R.string.ai_playlist_recommend),
+                            contentDescription = stringResource(R.string.ai_playlist_tile_generic),
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }

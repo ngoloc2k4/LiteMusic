@@ -126,9 +126,10 @@ fun SearchScreen(
         )
 
         // Source Filter Chips
+        val allLabel = stringResource(R.string.source_all)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             val sources = listOf(
-                AudioSource.ALL to ("🌟 " + stringResource(R.string.source_all)),
+                AudioSource.ALL to "🌟 $allLabel",
                 AudioSource.YOUTUBE_MUSIC to "🎵 YouTube Music",
                 AudioSource.YOUTUBE_VIDEO to "🎬 YouTube Video",
                 AudioSource.SOUNDCLOUD to "☁️ SoundCloud",

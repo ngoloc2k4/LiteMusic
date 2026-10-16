@@ -395,7 +395,7 @@ class MainActivity : ComponentActivity() {
                 }
             } else {
                 song.streamUrl ?: when (song.source) {
-                    AudioSource.YOUTUBE_MUSIC, AudioSource.YOUTUBE_VIDEO -> ytResolver.resolveStreamUrl(song)?.also { song.streamUrl = it }
+                    AudioSource.ALL, AudioSource.YOUTUBE_MUSIC, AudioSource.YOUTUBE_VIDEO -> ytResolver.resolveStreamUrl(song)?.also { song.streamUrl = it }
                     AudioSource.SOUNDCLOUD -> scResolver.resolveStreamUrl(song)?.also { song.streamUrl = it }
                     AudioSource.SPOTIFY -> spotifyBridge.resolveTrackToPlayableStream(song)?.also { song.streamUrl = it }
                 }

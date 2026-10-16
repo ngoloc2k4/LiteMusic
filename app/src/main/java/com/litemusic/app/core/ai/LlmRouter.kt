@@ -13,12 +13,12 @@ class LlmRouter(private val context: Context) {
     val openRouterProvider = OpenRouterProvider()
     val groqProvider = com.litemusic.app.core.ai.provider.OpenAiCompatibleProvider(
         id = "groq",
-        displayName = "Groq (Siêu tốc)",
+        displayName = "Groq (Ultra-fast)",
         defaultBaseUrl = "https://api.groq.com/openai/v1"
     )
     val customOpenAiProvider = com.litemusic.app.core.ai.provider.OpenAiCompatibleProvider(
         id = "custom_openai",
-        displayName = "Tùy chỉnh (OpenAI-compatible)",
+        displayName = "Custom (OpenAI-compatible)",
         defaultBaseUrl = "https://api.openai.com/v1",
         getCustomBaseUrl = { AiKeyStorage.getCustomOpenAiUrl(context) }
     )
@@ -89,7 +89,7 @@ class LlmRouter(private val context: Context) {
                 val orModel = AiKeyStorage.getSelectedModel(context, "openrouter")
                 return openRouterProvider.generate(orKey, request.copy(model = orModel))
             }
-            return LlmResult.Error("Chưa cài đặt API Key cho AI.", isRetryable = false)
+            return LlmResult.Error("No API Key configured for AI.", isRetryable = false)
         }
 
         // Try primary

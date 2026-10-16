@@ -11,14 +11,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 enum class AppThemeMode(val displayName: String) {
-    DARK_OLED("Tối OLED (Đen tuyệt đối)"),
-    DARK_STANDARD("Tối tiêu chuẩn M3"),
-    LIGHT("Sáng (Light Mode)"),
-    SYSTEM("Theo hệ thống")
+    DARK_OLED("Dark OLED (#000)"),
+    DARK_STANDARD("Standard Dark M3"),
+    LIGHT("Light Mode"),
+    SYSTEM("System Default")
 }
 
 enum class AppColorPalette(val displayName: String, val seedColor: Color) {
-    SYSTEM_MONET("Hệ thống (Monet)", Color(0xFF52E196)),
+    SYSTEM_MONET("System Monet", Color(0xFF52E196)),
     MINT("Botanical Mint", MintPrimaryDark),
     SAPPHIRE("Sapphire Blue", SapphirePrimaryDark),
     AMETHYST("Amethyst Purple", AmethystPrimaryDark),
@@ -28,8 +28,8 @@ enum class AppColorPalette(val displayName: String, val seedColor: Color) {
 }
 
 enum class AppThemeStyle(val displayName: String) {
-    MATERIAL_3("Material 3 Tiêu chuẩn"),
-    LIQUID_GLASS("Liquid Glass (iOS Glass x M3)")
+    MATERIAL_3("Standard M3"),
+    LIQUID_GLASS("Liquid Glass")
 }
 
 val LocalThemeStyle = staticCompositionLocalOf { AppThemeStyle.MATERIAL_3 }

@@ -61,7 +61,7 @@ class GeminiProvider(
 
     override suspend fun generate(apiKey: String, request: LlmRequest): LlmResult = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
-            return@withContext LlmResult.Error("Chưa thiết lập Gemini API Key. Vui lòng nhập key trong Cài đặt.", isRetryable = false)
+            return@withContext LlmResult.Error("Gemini API Key is missing. Please set it in Settings.", isRetryable = false)
         }
 
         val targetModel = request.model ?: "gemini-2.5-flash"
@@ -108,9 +108,9 @@ class GeminiProvider(
             if (!response.isSuccessful) {
                 val isRetryable = code == 429 || code == 503 || code == 500
                 val errMsg = if (code == 429) {
-                    "Gemini API vượt quá hạn ngạch (429 Too Many Requests)."
+                    "Gemini API quota exceeded (429 Too Many Requests)."
                 } else {
-                    "Lỗi Gemini API (HTTP $code): $bodyString"
+                    "Gemini API error (HTTP $code): $bodyString"
                 }
                 return@withContext LlmResult.Error(errMsg, isRetryable = isRetryable, statusCode = code)
             }
@@ -118,7 +118,7 @@ class GeminiProvider(
             val respJson = JSONObject(bodyString)
             val candidates = respJson.optJSONArray("candidates")
             if (candidates == null || candidates.length() == 0) {
-                return@withContext LlmResult.Error("Gemini không trả về kết quả nào.", isRetryable = false)
+                return@withContext LlmResult.Error("No candidates returned from Gemini.", isRetryable = false)
             }
 
             val firstCandidate = candidates.getJSONObject(0)
@@ -130,7 +130,7 @@ class GeminiProvider(
             val cleanedText = sanitizeJsonBlock(rawText)
             LlmResult.Success(text = cleanedText, modelUsed = targetModel)
         } catch (e: Exception) {
-            LlmResult.Error("Lỗi kết nối Gemini: ${e.localizedMessage ?: e.message}", isRetryable = true)
+            LlmResult.Error("Gemini connection error: ${e.localizedMessage ?: e.message}", isRetryable = true)
         }
     }
 

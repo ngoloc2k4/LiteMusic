@@ -25,7 +25,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.res.stringResource
 import coil.compose.AsyncImage
+import com.litemusic.app.R
 import com.litemusic.app.core.model.Song
 import com.litemusic.app.feature.aimusic.domain.AiGenerationState
 
@@ -78,14 +80,14 @@ fun AiPlaylistPreviewDialog(
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                         }
                         Text(
-                            text = "YouTube Music Playlist Curator",
+                            text = stringResource(R.string.ai_playlist_curator_title),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Đóng", tint = MaterialTheme.colorScheme.outline)
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_close), tint = MaterialTheme.colorScheme.outline)
                     }
                 }
 
@@ -134,13 +136,13 @@ fun AiPlaylistPreviewDialog(
                             ) {
                                 Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Text("Không thể tạo playlist", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.error)
+                                Text(stringResource(R.string.ai_playlist_error_title), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.error)
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(state.message, fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
                                 if (state.canFallbackLocal) {
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Button(onClick = onFallbackLocal) {
-                                        Text("Thử lại bằng Thuật toán cục bộ")
+                                        Text(stringResource(R.string.ai_playlist_retry_local))
                                     }
                                 }
                             }
@@ -170,32 +172,32 @@ private fun StepperProgressView(state: AiGenerationState) {
 
         StepItem(
             stepNumber = 1,
-            title = "Phân tích ý định & lập kế hoạch",
-            subtitle = if (state is AiGenerationState.ParsingIntent) "Đang phân tích prompt: \"${state.userPrompt}\"" else "Đã hoàn thành",
+            title = stringResource(R.string.ai_playlist_step_intent),
+            subtitle = if (state is AiGenerationState.ParsingIntent) stringResource(R.string.ai_playlist_step_intent_sub, state.userPrompt) else stringResource(R.string.ai_playlist_step_completed),
             isDone = step1Done,
             isActive = state is AiGenerationState.ParsingIntent
         )
         Spacer(modifier = Modifier.height(16.dp))
         StepItem(
             stepNumber = 2,
-            title = "Tìm kiếm đa nguồn song song",
-            subtitle = if (state is AiGenerationState.SearchingTracks) "Đang thu thập ứng viên từ YouTube & SoundCloud..." else if (step2Done) "Đã thu thập ứng viên" else "Đang chờ",
+            title = stringResource(R.string.ai_playlist_step_search),
+            subtitle = if (state is AiGenerationState.SearchingTracks) stringResource(R.string.ai_playlist_step_search_sub) else if (step2Done) stringResource(R.string.ai_playlist_step_search_done) else stringResource(R.string.ai_playlist_step_waiting),
             isDone = step2Done,
             isActive = state is AiGenerationState.SearchingTracks
         )
         Spacer(modifier = Modifier.height(16.dp))
         StepItem(
             stepNumber = 3,
-            title = "Lọc trùng & xếp hạng cục bộ",
-            subtitle = if (state is AiGenerationState.RankingTracks) "Đang chấm điểm ${state.candidateCount} bài hát..." else if (step3Done) "Đã hoàn thành" else "Đang chờ",
+            title = stringResource(R.string.ai_playlist_step_rank),
+            subtitle = if (state is AiGenerationState.RankingTracks) stringResource(R.string.ai_playlist_step_rank_sub, state.candidateCount) else if (step3Done) stringResource(R.string.ai_playlist_step_completed) else stringResource(R.string.ai_playlist_step_waiting),
             isDone = step3Done,
             isActive = state is AiGenerationState.RankingTracks
         )
         Spacer(modifier = Modifier.height(16.dp))
         StepItem(
             stepNumber = 4,
-            title = "AI hoàn thiện thứ tự danh sách phát",
-            subtitle = if (state is AiGenerationState.RankingTracks) "Đang tối ưu giai điệu chuyển tiếp êm ái..." else "Sắp hoàn tất",
+            title = stringResource(R.string.ai_playlist_step_sequence),
+            subtitle = if (state is AiGenerationState.RankingTracks) stringResource(R.string.ai_playlist_step_sequence_sub) else stringResource(R.string.ai_playlist_step_almost_done),
             isDone = false,
             isActive = state is AiGenerationState.RankingTracks
         )
@@ -308,7 +310,7 @@ private fun PlaylistSuccessView(
 
                     // Metadata Subtitle
                     Text(
-                        text = "LiteMusic • ${state.tracks.size} bài hát • Giám tuyển AI",
+                        text = stringResource(R.string.ai_playlist_meta_info, state.tracks.size),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
@@ -344,7 +346,7 @@ private fun PlaylistSuccessView(
                         ) {
                             Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Phát tất cả", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.home_play_all), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
 
                         // Shuffle Button
@@ -355,7 +357,7 @@ private fun PlaylistSuccessView(
                         ) {
                             Icon(Icons.Default.Shuffle, contentDescription = null, modifier = Modifier.size(15.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Trộn bài", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.action_shuffle), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
 
                         // Add to Queue Button
@@ -378,7 +380,7 @@ private fun PlaylistSuccessView(
             // Section Header
             item {
                 Text(
-                    text = "DANH SÁCH BÀI HÁT (${state.tracks.size})",
+                    text = stringResource(R.string.ai_playlist_tracks_header, state.tracks.size),
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.outline,
@@ -455,7 +457,7 @@ private fun PlaylistSuccessView(
                         ) {
                             Icon(
                                 Icons.Default.PlayArrow,
-                                contentDescription = "Phát bài này",
+                                contentDescription = stringResource(R.string.ai_playlist_play_track),
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(20.dp)
                             )

@@ -1,5 +1,8 @@
 package com.litemusic.app.ui.search
 
+import androidx.compose.ui.res.stringResource
+import com.litemusic.app.R
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,16 +38,28 @@ data class SearchBrowseCategory(
     val gradient: List<Color>
 )
 
-val BROWSE_CATEGORIES = listOf(
-    SearchBrowseCategory("V-Pop Thịnh Hành", "V-Pop Thịnh Hành", "Các hit nóng nhất hiện nay", "🔥", listOf(Color(0xFFE11D48), Color(0xFF9333EA))),
-    SearchBrowseCategory("Lo-fi Thư Giãn", "Lo-fi Chill Buổi Tối", "Thư giãn, tập trung & ngủ ngon", "☕", listOf(Color(0xFF0284C7), Color(0xFF0D9488))),
-    SearchBrowseCategory("Acoustic & Cafe", "Acoustic Nhẹ Nhàng", "Giai điệu mộc mạc lắng đọng", "🎸", listOf(Color(0xFFD97706), Color(0xFFEA580C))),
-    SearchBrowseCategory("EDM & Remix", "EDM Remix Cực Bốc", "Bùng nổ năng lượng tiệc tùng", "⚡", listOf(Color(0xFF7C3AED), Color(0xFFDB2777))),
-    SearchBrowseCategory("Gym & Workout", "Gym Workout Động Lực", "Đốt cháy calo cùng nhịp bass", "🏋️", listOf(Color(0xFFDC2626), Color(0xFF991B1B))),
-    SearchBrowseCategory("Rap Việt Đỉnh Cao", "Rap Việt", "Punchline chất, flow mượt mà", "🎤", listOf(Color(0xFF059669), Color(0xFF10B981))),
-    SearchBrowseCategory("Nhạc Mưa & Buồn", "Nhạc Mưa Chill", "Tâm trạng những ngày mưa rơi", "🌧️", listOf(Color(0xFF475569), Color(0xFF1E293B))),
-    SearchBrowseCategory("Bolero Tuyển Chọn", "Bolero Trữ Tình Hay Nhất", "Tình khúc quê hương ngọt ngào", "📻", listOf(Color(0xFFB45309), Color(0xFF78350F)))
-)
+@Composable
+fun getLocalizedCategories(): List<SearchBrowseCategory> {
+    val catVpop = stringResource(R.string.cat_vpop)
+    val catLofi = stringResource(R.string.cat_lofi)
+    val catAcoustic = stringResource(R.string.cat_acoustic)
+    val catEdm = stringResource(R.string.cat_edm)
+    val catGym = stringResource(R.string.cat_gym)
+    val catRap = stringResource(R.string.cat_rap)
+    val catRain = stringResource(R.string.cat_rain)
+    val catNostalgia = stringResource(R.string.cat_nostalgia)
+
+    return listOf(
+        SearchBrowseCategory(catVpop, catVpop, stringResource(R.string.cat_vpop_desc), "🔥", listOf(Color(0xFFE11D48), Color(0xFF9333EA))),
+        SearchBrowseCategory(catLofi, catLofi, stringResource(R.string.cat_lofi_desc), "☕", listOf(Color(0xFF0284C7), Color(0xFF0D9488))),
+        SearchBrowseCategory(catAcoustic, catAcoustic, stringResource(R.string.cat_acoustic_desc), "🎸", listOf(Color(0xFFD97706), Color(0xFFEA580C))),
+        SearchBrowseCategory(catEdm, catEdm, stringResource(R.string.cat_edm_desc), "⚡", listOf(Color(0xFF7C3AED), Color(0xFFDB2777))),
+        SearchBrowseCategory(catGym, catGym, stringResource(R.string.cat_gym_desc), "🏋️", listOf(Color(0xFFDC2626), Color(0xFF991B1B))),
+        SearchBrowseCategory(catRap, catRap, stringResource(R.string.cat_rap_desc), "🎤", listOf(Color(0xFF059669), Color(0xFF10B981))),
+        SearchBrowseCategory(catRain, catRain, stringResource(R.string.cat_rain_desc), "🌧️", listOf(Color(0xFF475569), Color(0xFF1E293B))),
+        SearchBrowseCategory(catNostalgia, catNostalgia, stringResource(R.string.cat_nostalgia_desc), "📻", listOf(Color(0xFFB45309), Color(0xFF78350F)))
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,7 +80,7 @@ fun SearchScreen(
     isGlass: Boolean = false
 ) {
     var recentSearches by remember {
-        mutableStateOf(listOf("V-Pop Thịnh Hành", "Lo-fi Chill Buổi Tối", "Sơn Tùng M-TP", "Rap Việt", "Acoustic Nhẹ Nhàng"))
+        mutableStateOf(listOf("Top Trending", "Lo-fi Chill", "Acoustic", "EDM Remix"))
     }
 
     Column(
@@ -79,12 +94,12 @@ fun SearchScreen(
             value = searchQuery,
             onValueChange = onSearchQueryChange,
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Tìm bài hát, nghệ sĩ, tâm trạng...", fontSize = 13.5.sp) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.primary) },
+            placeholder = { Text(stringResource(R.string.search_hint), fontSize = 13.5.sp) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = stringResource(R.string.nav_search), tint = MaterialTheme.colorScheme.primary) },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
                     IconButton(onClick = { onSearchQueryChange("") }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Clear", tint = MaterialTheme.colorScheme.outline)
+                        Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.action_clear), tint = MaterialTheme.colorScheme.outline)
                     }
                 }
             },
@@ -126,7 +141,7 @@ fun SearchScreen(
                 // Section: Recent searches
                 item {
                     Text(
-                        text = "Gợi ý tìm kiếm phổ biến",
+                        text = stringResource(R.string.search_popular_suggestions),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.outline
@@ -162,14 +177,14 @@ fun SearchScreen(
                 item {
                     Column {
                         Text(
-                            text = "Khám phá danh mục",
+                            text = stringResource(R.string.search_explore_categories),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Duyệt tìm theo thể loại & tâm trạng phổ biến",
+                            text = stringResource(R.string.search_explore_desc),
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -177,7 +192,8 @@ fun SearchScreen(
                 }
 
                 // 2-column grid of categories
-                items(BROWSE_CATEGORIES.chunked(2)) { pair ->
+                val categories = getLocalizedCategories()
+                items(categories.chunked(2)) { pair ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -203,7 +219,7 @@ fun SearchScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 3.dp)
                         Text(
-                            text = "Đang tìm kiếm '$searchQuery'...",
+                            text = stringResource(R.string.search_searching, searchQuery),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -214,13 +230,13 @@ fun SearchScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("🔍", fontSize = 42.sp)
                         Text(
-                            text = "Không tìm thấy kết quả phù hợp",
+                            text = stringResource(R.string.search_no_results),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Thử tìm với tên bài hát khác hoặc đổi nguồn phát.",
+                            text = stringResource(R.string.search_no_results_desc),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -249,7 +265,7 @@ fun SearchScreen(
                         item {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Bài hát khác (${searchResults.size - 1})",
+                                text = stringResource(R.string.search_other_tracks, searchResults.size - 1),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.5.sp,
                                 color = MaterialTheme.colorScheme.outline
@@ -356,7 +372,7 @@ fun TopResultHeroCard(
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text(
-                text = "KẾT QUẢ HÀNG ĐẦU",
+                text = stringResource(R.string.search_top_results),
                 fontSize = 10.5.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 1.sp,
@@ -409,7 +425,7 @@ fun TopResultHeroCard(
                 IconButton(onClick = onToggleFav) {
                     Icon(
                         if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = "Yêu thích",
+                        contentDescription = stringResource(R.string.action_favorite),
                         tint = if (isFav) Color(0xFFEF4444) else MaterialTheme.colorScheme.outline
                     )
                 }
@@ -430,7 +446,7 @@ fun TopResultHeroCard(
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Phát ngay", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.action_play_now), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
 
                 OutlinedButton(
@@ -442,7 +458,7 @@ fun TopResultHeroCard(
                 ) {
                     Icon(Icons.Default.PlaylistAdd, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("+ Hàng chờ", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.action_add_to_queue), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -539,7 +555,7 @@ fun SearchSongCard(
             IconButton(onClick = onToggleFav) {
                 Icon(
                     if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = "Yêu thích",
+                    contentDescription = stringResource(R.string.action_favorite),
                     tint = if (isFav) Color(0xFFEF4444) else MaterialTheme.colorScheme.outline
                 )
             }
@@ -547,14 +563,14 @@ fun SearchSongCard(
             // 3-dot dropdown menu for Block options & Queue
             Box {
                 IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Tùy chọn", tint = MaterialTheme.colorScheme.outline)
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.action_options), tint = MaterialTheme.colorScheme.outline)
                 }
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Thêm vào danh sách chờ") },
+                        text = { Text(stringResource(R.string.action_add_to_queue)) },
                         leadingIcon = { Icon(Icons.Default.PlaylistAdd, contentDescription = null) },
                         onClick = {
                             onAddToQueue()
@@ -562,7 +578,7 @@ fun SearchSongCard(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Chặn bài hát này") },
+                        text = { Text(stringResource(R.string.block_song)) },
                         leadingIcon = { Icon(Icons.Default.Block, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                         onClick = {
                             onBlockSong()
@@ -570,7 +586,7 @@ fun SearchSongCard(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Chặn nghệ sĩ '${song.artist}'") },
+                        text = { Text(stringResource(R.string.block_artist) + " '${song.artist}'") },
                         leadingIcon = { Icon(Icons.Default.PersonOff, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                         onClick = {
                             onBlockArtist()

@@ -166,9 +166,9 @@ object DebugLogServer {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("LiteMusic_Logcat", logs)
             clipboard.setPrimaryClip(clip)
-            Toast.makeText(context, "Đã sao chép Logcat vào bộ nhớ tạm!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(com.litemusic.app.R.string.debug_copied_to_clipboard), Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            Toast.makeText(context, "Lỗi khi sao chép Logcat: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(com.litemusic.app.R.string.debug_copy_error, e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -300,27 +300,27 @@ object DebugLogServer {
             <span class="badge">Port $port</span>
         </div>
         <div class="controls">
-            <input type="text" id="filter-input" placeholder="🔍 Tìm kiếm log (Tag, Text)..." style="width: 220px;" oninput="applyFilter()">
+            <input type="text" id="filter-input" placeholder="🔍 Search logs (Tag, Text)..." style="width: 220px;" oninput="applyFilter()">
             <select id="level-select" onchange="applyFilter()">
-                <option value="ALL">Mọi cấp độ (All)</option>
-                <option value="D">Debug & cao hơn</option>
-                <option value="I">Info & cao hơn</option>
-                <option value="W">Warn & Error</option>
-                <option value="E">Chỉ Error</option>
+                <option value="ALL">All Levels</option>
+                <option value="D">Debug &amp; above</option>
+                <option value="I">Info &amp; above</option>
+                <option value="W">Warn &amp; Error</option>
+                <option value="E">Error only</option>
             </select>
-            <button id="toggle-refresh-btn" onclick="toggleAutoRefresh()">⏸️ Dừng Auto-Refresh</button>
-            <button onclick="fetchLogs()">🔄 Tải lại</button>
-            <button onclick="copyLogs()">📋 Sao chép</button>
-            <button class="btn-danger" onclick="clearLogs()">🗑️ Xóa Logcat</button>
+            <button id="toggle-refresh-btn" onclick="toggleAutoRefresh()">⏸️ Pause Auto-Refresh</button>
+            <button onclick="fetchLogs()">🔄 Reload</button>
+            <button onclick="copyLogs()">📋 Copy</button>
+            <button class="btn-danger" onclick="clearLogs()">🗑️ Clear Logcat</button>
         </div>
     </header>
 
     <main>
-        <div id="log-container">Đang kết nối tới Logcat Android...</div>
+        <div id="log-container">Connecting to Android Logcat...</div>
     </main>
 
     <footer>
-        <span id="status-text">Đang kết nối...</span>
+        <span id="status-text">Connecting...</span>
         <span>Local Endpoint: <a href="/raw" target="_blank" style="color: var(--accent);">/raw</a></span>
     </footer>
 

@@ -6,7 +6,7 @@ import com.litemusic.app.core.ai.LlmResult
 
 class MockLlmProvider : LlmProvider {
     override val id: String = "mock"
-    override val displayName: String = "Thuật toán cục bộ (Không cần API/AI)"
+    override val displayName: String = "Local Algorithm (Offline / No API)"
 
     override suspend fun getAvailableModels(apiKey: String, forceRefresh: Boolean): List<String> {
         return listOf("local-heuristic-v1")
@@ -15,7 +15,7 @@ class MockLlmProvider : LlmProvider {
     override suspend fun generate(apiKey: String, request: LlmRequest): LlmResult {
         // Returns basic mock JSON that passes validation
         return LlmResult.Success(
-            text = """{"selectedIds": [], "reason": "Chạy bằng thuật toán cục bộ"}""",
+            text = """{"selectedIds": [], "reason": "Generated using local heuristic algorithm"}""",
             modelUsed = "local-heuristic-v1"
         )
     }

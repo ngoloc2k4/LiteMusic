@@ -1,5 +1,8 @@
 package com.litemusic.app.ui.library
 
+import androidx.compose.ui.res.stringResource
+import com.litemusic.app.R
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -70,13 +73,13 @@ fun LibraryScreen(
         ) {
             Column {
                 Text(
-                    text = "📚 Thư viện cá nhân",
+                    text = stringResource(R.string.library_title),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Quản lý bài hát yêu thích, lịch sử nghe và danh sách chặn",
+                    text = stringResource(R.string.library_subtitle),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -89,9 +92,9 @@ fun LibraryScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             listOf(
-                LibraryTab.FAVORITES to "❤️ Yêu thích (${favorites.size})",
-                LibraryTab.RECENT to "🕒 Gần đây (${recentSongs.size})",
-                LibraryTab.BLOCKLIST to "🚫 Đã chặn (${blockedTitles.size + blockedArtists.size})"
+                LibraryTab.FAVORITES to stringResource(R.string.library_tab_favorites, favorites.size),
+                LibraryTab.RECENT to stringResource(R.string.library_tab_recent, recentSongs.size),
+                LibraryTab.BLOCKLIST to stringResource(R.string.library_tab_blocklist, blockedTitles.size + blockedArtists.size)
             ).forEach { (tab, label) ->
                 val isSelected = selectedTab == tab
                 FilterChip(
@@ -113,8 +116,8 @@ fun LibraryScreen(
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("💔", fontSize = 48.sp)
-                            Text("Chưa có bài hát yêu thích nào", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.outline)
-                            Text("Bấm vào biểu tượng trái tim khi tìm kiếm để lưu vào đây", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                            Text(stringResource(R.string.library_empty_favorites), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.outline)
+                            Text(stringResource(R.string.library_empty_favorites_desc), fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
                         }
                     }
                 } else {
@@ -142,7 +145,7 @@ fun LibraryScreen(
                                     if (firstFavArt.isNotEmpty()) {
                                         AsyncImage(
                                             model = firstFavArt,
-                                            contentDescription = "Yêu thích",
+                                            contentDescription = stringResource(R.string.action_favorite),
                                             modifier = Modifier.fillMaxSize(),
                                             contentScale = ContentScale.Crop
                                         )
@@ -151,8 +154,8 @@ fun LibraryScreen(
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(10.dp))
-                                Text("Bài hát yêu thích", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                                Text("Danh sách phát cá nhân • ${favorites.size} bài hát", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                                Text(stringResource(R.string.library_favorites_header), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                                Text(stringResource(R.string.library_favorites_count, favorites.size), fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 Row(
@@ -166,7 +169,7 @@ fun LibraryScreen(
                                     ) {
                                         Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Phát tất cả", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text(stringResource(R.string.action_play_all), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                     OutlinedButton(
                                         onClick = { onPlayAll(favorites.shuffled()) },
@@ -175,7 +178,7 @@ fun LibraryScreen(
                                     ) {
                                         Icon(Icons.Default.Shuffle, contentDescription = null, modifier = Modifier.size(15.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Trộn bài", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text(stringResource(R.string.action_shuffle), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                     FilledTonalButton(
                                         onClick = { favorites.forEach { onAddToQueue(it) } },
@@ -184,7 +187,7 @@ fun LibraryScreen(
                                     ) {
                                         Icon(Icons.Default.QueueMusic, contentDescription = null, modifier = Modifier.size(15.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("+ Queue", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text(stringResource(R.string.action_add_to_queue), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -213,7 +216,7 @@ fun LibraryScreen(
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("🎧", fontSize = 48.sp)
-                            Text("Chưa có bài hát nào nghe gần đây", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.outline)
+                            Text(stringResource(R.string.library_empty_recent), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.outline)
                         }
                     }
                 } else {
@@ -240,7 +243,7 @@ fun LibraryScreen(
                                     if (firstRecentArt.isNotEmpty()) {
                                         AsyncImage(
                                             model = firstRecentArt,
-                                            contentDescription = "Gần đây",
+                                            contentDescription = stringResource(R.string.nav_library),
                                             modifier = Modifier.fillMaxSize(),
                                             contentScale = ContentScale.Crop
                                         )
@@ -249,8 +252,8 @@ fun LibraryScreen(
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(10.dp))
-                                Text("Bài hát đã nghe gần đây", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                                Text("Lịch sử nghe nhạc • ${recentSongs.size} bài hát", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                                Text(stringResource(R.string.library_recent_header), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                                Text(stringResource(R.string.library_recent_count, recentSongs.size), fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 Row(
@@ -264,7 +267,7 @@ fun LibraryScreen(
                                     ) {
                                         Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Phát lại tất cả", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text(stringResource(R.string.action_play_all), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                     OutlinedButton(
                                         onClick = { onPlayAll(recentSongs.shuffled()) },
@@ -273,7 +276,7 @@ fun LibraryScreen(
                                     ) {
                                         Icon(Icons.Default.Shuffle, contentDescription = null, modifier = Modifier.size(15.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Trộn bài", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text(stringResource(R.string.action_shuffle), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                     OutlinedButton(
                                         onClick = {
@@ -285,7 +288,7 @@ fun LibraryScreen(
                                     ) {
                                         Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(15.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Xóa lịch sử", fontSize = 12.sp)
+                                        Text(stringResource(R.string.library_clear_history), fontSize = 12.sp)
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -334,7 +337,7 @@ fun LibraryScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Quản lý danh sách chặn",
+                                text = stringResource(R.string.library_blocklist_header),
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -345,14 +348,14 @@ fun LibraryScreen(
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Thêm thủ công", fontSize = 12.sp)
+                                Text(stringResource(R.string.library_add_manually), fontSize = 12.sp)
                             }
                         }
                     }
 
                     item {
                         Text(
-                            text = "Nghệ sĩ & Kênh bị chặn (${blockedArtists.size})",
+                            text = stringResource(R.string.library_blocked_artists, blockedArtists.size),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.outline
@@ -361,7 +364,7 @@ fun LibraryScreen(
 
                     if (blockedArtists.isEmpty()) {
                         item {
-                            Text("Không có nghệ sĩ nào trong danh sách chặn", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                            Text(stringResource(R.string.library_empty_blocked_artists), fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
                         }
                     } else {
                         item {
@@ -379,7 +382,7 @@ fun LibraryScreen(
                                         },
                                         label = { Text(artist, fontSize = 12.sp) },
                                         trailingIcon = {
-                                            Icon(Icons.Default.Close, contentDescription = "Bỏ chặn", modifier = Modifier.size(16.dp))
+                                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_unblock), modifier = Modifier.size(16.dp))
                                         }
                                     )
                                 }
@@ -390,7 +393,7 @@ fun LibraryScreen(
                     item {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Từ khóa & Tên bài hát chặn (${blockedKeywords.size})",
+                            text = stringResource(R.string.library_blocked_keywords, blockedKeywords.size),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.outline
@@ -399,7 +402,7 @@ fun LibraryScreen(
 
                     if (blockedKeywords.isEmpty()) {
                         item {
-                            Text("Không có từ khóa bài hát nào bị chặn", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                            Text(stringResource(R.string.library_empty_blocked_keywords), fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
                         }
                     } else {
                         item {
@@ -417,7 +420,7 @@ fun LibraryScreen(
                                         },
                                         label = { Text(keyword, fontSize = 12.sp) },
                                         trailingIcon = {
-                                            Icon(Icons.Default.Close, contentDescription = "Bỏ chặn", modifier = Modifier.size(16.dp))
+                                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_unblock), modifier = Modifier.size(16.dp))
                                         }
                                     )
                                 }
@@ -428,7 +431,7 @@ fun LibraryScreen(
                     item {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Bài hát cụ thể đã chặn (${blockedTitles.size})",
+                            text = stringResource(R.string.library_blocked_keywords, blockedTitles.size),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.outline
@@ -437,7 +440,7 @@ fun LibraryScreen(
 
                     if (blockedTitles.isEmpty()) {
                         item {
-                            Text("Không có bài hát nào bị chặn cụ thể", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                            Text(stringResource(R.string.library_empty_blocked_keywords), fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
                         }
                     } else {
                         items(blockedTitles.entries.toList()) { (songId, title) ->
@@ -460,7 +463,7 @@ fun LibraryScreen(
                                             refreshAll()
                                         }
                                     ) {
-                                        Text("Bỏ chặn", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                                        Text(stringResource(R.string.action_unblock), fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                                     }
                                 }
                             }
@@ -483,12 +486,12 @@ fun AddBlockItemDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("Thêm vào danh sách chặn", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(stringResource(R.string.library_add_block_title), fontWeight = FontWeight.Bold, fontSize = 16.sp)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "Nhập tên nghệ sĩ/kênh hoặc tên bài hát/từ khóa muốn lọc hoàn toàn khỏi ứng dụng.",
+                    text = stringResource(R.string.library_blocklist_desc),
                     fontSize = 12.5.sp,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -500,12 +503,12 @@ fun AddBlockItemDialog(
                     FilterChip(
                         selected = isArtistType,
                         onClick = { isArtistType = true },
-                        label = { Text("Kênh / Nghệ sĩ", fontSize = 12.sp) }
+                        label = { Text(stringResource(R.string.library_type_channel_artist), fontSize = 12.sp) }
                     )
                     FilterChip(
                         selected = !isArtistType,
                         onClick = { isArtistType = false },
-                        label = { Text("Tên bài / Từ khóa", fontSize = 12.sp) }
+                        label = { Text(stringResource(R.string.library_type_title_keyword), fontSize = 12.sp) }
                     )
                 }
 
@@ -514,7 +517,7 @@ fun AddBlockItemDialog(
                     onValueChange = { blockText = it },
                     placeholder = {
                         Text(
-                            if (isArtistType) "VD: Tên nghệ sĩ hoặc Channel..." else "VD: Tên bài hát hoặc Từ khóa...",
+                            if (isArtistType) stringResource(R.string.library_input_artist_hint) else stringResource(R.string.library_input_title_hint),
                             fontSize = 12.5.sp
                         )
                     },
@@ -534,12 +537,12 @@ fun AddBlockItemDialog(
                 enabled = blockText.isNotBlank(),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Chặn")
+                Text(stringResource(R.string.action_block))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Hủy")
+                Text(stringResource(R.string.action_cancel))
             }
         }
     )
@@ -614,12 +617,12 @@ fun LibrarySongRow(
 
             if (onRemoveFav != null) {
                 IconButton(onClick = onRemoveFav) {
-                    Icon(Icons.Default.Favorite, contentDescription = "Bỏ thích", tint = Color(0xFFEF4444))
+                    Icon(Icons.Default.Favorite, contentDescription = stringResource(R.string.action_remove_from_favorites), tint = Color(0xFFEF4444))
                 }
             }
 
             IconButton(onClick = onAddToQueue) {
-                Icon(Icons.Default.PlaylistAdd, contentDescription = "Thêm vào hàng đợi", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.PlaylistAdd, contentDescription = stringResource(R.string.action_add_to_queue), tint = MaterialTheme.colorScheme.primary)
             }
         }
     }

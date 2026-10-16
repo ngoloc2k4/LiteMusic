@@ -65,7 +65,7 @@ class OpenRouterProvider(
 
     override suspend fun generate(apiKey: String, request: LlmRequest): LlmResult = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
-            return@withContext LlmResult.Error("Chưa thiết lập OpenRouter API Key.", isRetryable = false)
+            return@withContext LlmResult.Error("OpenRouter API Key is missing. Please set it in Settings.", isRetryable = false)
         }
 
         val targetModel = request.model ?: "meta-llama/llama-3.1-8b-instruct:free"
@@ -108,13 +108,13 @@ class OpenRouterProvider(
 
             if (!response.isSuccessful) {
                 val isRetryable = code == 429 || code == 503
-                return@withContext LlmResult.Error("OpenRouter lỗi (HTTP $code): $bodyString", isRetryable = isRetryable, statusCode = code)
+                return@withContext LlmResult.Error("OpenRouter error (HTTP $code): $bodyString", isRetryable = isRetryable, statusCode = code)
             }
 
             val respJson = JSONObject(bodyString)
             val choices = respJson.optJSONArray("choices")
             if (choices == null || choices.length() == 0) {
-                return@withContext LlmResult.Error("OpenRouter không trả về choices nào.", isRetryable = false)
+                return@withContext LlmResult.Error("No choices returned from OpenRouter.", isRetryable = false)
             }
 
             val msg = choices.getJSONObject(0).optJSONObject("message")
@@ -127,7 +127,7 @@ class OpenRouterProvider(
 
             LlmResult.Success(text = cleanedText, modelUsed = targetModel)
         } catch (e: Exception) {
-            LlmResult.Error("Lỗi kết nối OpenRouter: ${e.localizedMessage ?: e.message}", isRetryable = true)
+            LlmResult.Error("OpenRouter connection error: ${e.localizedMessage ?: e.message}", isRetryable = true)
         }
     }
 }

@@ -20,8 +20,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.litemusic.app.R
 
 @Composable
 fun AiSearchTile(
@@ -75,14 +77,14 @@ fun AiSearchTile(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "✨ TẠO PLAYLIST THÔNG MINH BẰNG AI",
+                    text = stringResource(R.string.ai_playlist_tile_badge),
                     fontSize = 10.5.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color(0xFFC084FC),
                     letterSpacing = 0.5.sp
                 )
                 Text(
-                    text = if (query.isNotBlank()) "Gom 20 bài phù hợp nhất cho: \"$query\"" else "Kiến tạo danh sách nhạc bằng AI theo cảm xúc",
+                    text = if (query.isNotBlank()) stringResource(R.string.ai_playlist_tile_query, query) else stringResource(R.string.ai_playlist_tile_generic),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -90,7 +92,7 @@ fun AiSearchTile(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "Tìm kiếm kết hợp đa nguồn YouTube & SoundCloud",
+                    text = stringResource(R.string.ai_playlist_tile_sources),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.outline,
                     maxLines = 1

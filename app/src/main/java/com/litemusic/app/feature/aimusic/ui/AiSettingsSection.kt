@@ -13,9 +13,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.litemusic.app.R
 import com.litemusic.app.core.ai.LlmRouter
 import com.litemusic.app.core.ai.security.AiKeyStorage
 import kotlinx.coroutines.launch
@@ -74,7 +76,7 @@ fun AiSettingsSection(
             ) {
                 Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFFA855F7))
                 Text(
-                    text = "🤖 Cấu hình AI Music Multi-Provider",
+                    text = stringResource(R.string.ai_settings_title),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -82,13 +84,13 @@ fun AiSettingsSection(
             }
 
             Text(
-                text = "Hệ thống AI độc lập giúp tự động tạo danh sách phát, phân tích lời nhạc và tìm kiếm ngữ nghĩa.",
+                text = stringResource(R.string.ai_settings_desc),
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.outline
             )
 
             // Provider Selector
-            Text("Nhà cung cấp LLM chính:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.ai_settings_provider_label), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             androidx.compose.foundation.lazy.LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -125,12 +127,12 @@ fun AiSettingsSection(
                                 groqKey = it
                                 AiKeyStorage.setGroqKey(context, it)
                             },
-                            label = { Text("Groq API Key (Miễn phí console.groq.com)") },
+                            label = { Text(stringResource(R.string.ai_settings_groq_label)) },
                             placeholder = { Text("gsk_...") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Text("Tốc độ xử lý hàng trăm tokens/s với Llama 3.3 70B & 3.1 8B.", fontSize = 11.sp, color = Color(0xFF10B981))
+                        Text(stringResource(R.string.ai_settings_groq_desc), fontSize = 11.sp, color = Color(0xFF10B981))
                     }
                 }
                 "gemini" -> {
@@ -140,7 +142,7 @@ fun AiSettingsSection(
                             geminiKey = it
                             AiKeyStorage.setGeminiKey(context, it)
                         },
-                        label = { Text("Google Gemini API Key (Miễn phí)") },
+                        label = { Text(stringResource(R.string.ai_settings_gemini_label)) },
                         placeholder = { Text("AIzaSy...") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -153,7 +155,7 @@ fun AiSettingsSection(
                             openRouterKey = it
                             AiKeyStorage.setOpenRouterKey(context, it)
                         },
-                        label = { Text("OpenRouter API Key") },
+                        label = { Text(stringResource(R.string.ai_settings_openrouter_label)) },
                         placeholder = { Text("sk-or-v1-...") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -167,7 +169,7 @@ fun AiSettingsSection(
                                 customOpenAiUrl = it
                                 AiKeyStorage.setCustomOpenAiUrl(context, it)
                             },
-                            label = { Text("Base URL OpenAI Compatible") },
+                            label = { Text(stringResource(R.string.ai_settings_openai_url_label)) },
                             placeholder = { Text("https://api.openai.com/v1") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
@@ -178,7 +180,7 @@ fun AiSettingsSection(
                                 customOpenAiKey = it
                                 AiKeyStorage.setCustomOpenAiKey(context, it)
                             },
-                            label = { Text("API Key (Tùy chọn nếu chạy local)") },
+                            label = { Text(stringResource(R.string.ai_settings_openai_key_label)) },
                             placeholder = { Text("sk-...") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
@@ -196,12 +198,12 @@ fun AiSettingsSection(
                 ) {
                     val cacheInfo = AiKeyStorage.getCachedModels(context, selectedProvider)
                     val statusText = if (cacheInfo != null && !cacheInfo.isExpired) {
-                        "Cache còn ${cacheInfo.remainingHours}h / 3 ngày"
+                        stringResource(R.string.ai_settings_cache_remaining, cacheInfo.remainingHours)
                     } else {
-                        "Cache 3 ngày tự động"
+                        stringResource(R.string.ai_settings_cache_auto)
                     }
 
-                    Text("Danh sách Model ($statusText):", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.ai_settings_models_label, statusText), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
 
                     IconButton(
                         onClick = {
@@ -209,7 +211,7 @@ fun AiSettingsSection(
                                 isRefreshingModels = true
                                 cachedModels = router.getModelsWith3DayCache(selectedProvider, forceRefresh = true)
                                 isRefreshingModels = false
-                                Toast.makeText(context, "Đã cập nhật danh sách model mới!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.ai_settings_models_refreshed), Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier.size(28.dp)
@@ -217,7 +219,7 @@ fun AiSettingsSection(
                         if (isRefreshingModels) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         } else {
-                            Icon(Icons.Default.Refresh, contentDescription = "Làm mới cache", modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.ai_settings_models_refresh_btn), modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -262,8 +264,8 @@ fun AiSettingsSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Tự động fallback thuật toán cục bộ", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Khi không có API Key hoặc hết quota, tự động tạo playlist trên máy", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                    Text(stringResource(R.string.ai_settings_fallback_title), fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.ai_settings_fallback_desc), fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
                 }
                 Switch(
                     checked = autoFallback,

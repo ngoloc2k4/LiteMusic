@@ -195,15 +195,15 @@ class MainActivity : ComponentActivity() {
                     },
                     onClearLogcat = {
                         DebugLogServer.clearLogcat()
-                        Toast.makeText(this, "Đã xóa sạch bộ đệm Logcat!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.toast_logcat_cleared), Toast.LENGTH_SHORT).show()
                     },
                     onClearCache = {
                         try {
                             val cDir = File(cacheDir, "media_cache")
                             if (cDir.exists()) cDir.deleteRecursively()
-                            Toast.makeText(this, "Đã dọn dẹp 250MB bộ nhớ đệm!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.toast_cache_cleared, "250"), Toast.LENGTH_SHORT).show()
                         } catch (e: Exception) {
-                            Toast.makeText(this, "Đã dọn dẹp!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.toast_cache_cleared, "0"), Toast.LENGTH_SHORT).show()
                         }
                     },
                     onPlaySong = { song, asVideo -> playSong(song, asVideo) },
@@ -338,7 +338,7 @@ class MainActivity : ComponentActivity() {
                 controller.pause()
                 controller.clearMediaItems()
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "Không thể lấy luồng âm thanh hoặc video cho bài này", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.toast_stream_error), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -349,6 +349,16 @@ class MainActivity : ComponentActivity() {
         controllerFuture?.let { MediaController.releaseFuture(it) }
         super.onDestroy()
     }
+}
+
+
+enum class MoodCategory(val titleRes: Int) {
+    ALL(R.string.mood_all),
+    RELAX(R.string.mood_relax),
+    ENERGY(R.string.mood_energy),
+    FOCUS(R.string.mood_focus),
+    ROMANCE(R.string.mood_romance),
+    PARTY(R.string.mood_party)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -424,7 +434,7 @@ fun MainAppScreen(
             override suspend fun onPreFling(available: Velocity): Velocity {
                 if (homePullOffset >= homePullThreshold) {
                     refreshHomeTrigger++
-                    Toast.makeText(context, "Đang làm mới trang chủ...", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.toast_home_refreshing), Toast.LENGTH_SHORT).show()
                 }
                 homePullOffset = 0f
                 return Velocity.Zero
@@ -538,7 +548,7 @@ fun MainAppScreen(
         durationMs = 0L
         songQueue = emptyList()
         isPlayerSheetOpen = false
-        Toast.makeText(context, "Đã tắt hẳn bài đang phát và danh sách chờ", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.toast_stopped_playback), Toast.LENGTH_SHORT).show()
     }
 
     // Sleep Timer Live Countdown Loop
@@ -552,34 +562,34 @@ fun MainAppScreen(
             if (sleepTimerSeconds == 0L) {
                 mediaController?.pause()
                 sleepTimerSeconds = null
-                Toast.makeText(context, "Đã tắt nhạc theo hẹn giờ", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.toast_timer_stopped), Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     var personalizedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
-    var selectedMoodFilter by remember { mutableStateOf("Tất cả") }
-    val moodFilters = remember { listOf("Tất cả", "Thư giãn", "Năng lượng", "Tập trung", "Lãng mạn", "Tiệc tùng") }
+    var selectedMoodFilter by remember { mutableStateOf(MoodCategory.ALL) }
+    val moodFilters = remember { MoodCategory.entries }
 
     val displayedHomeSongs = remember(homeSongs, selectedMoodFilter) {
         when (selectedMoodFilter) {
-            "Thư giãn" -> homeSongs.filter { s ->
+            MoodCategory.RELAX -> homeSongs.filter { s ->
                 val t = (s.title + " " + s.artist).lowercase()
                 t.contains("chill") || t.contains("lofi") || t.contains("thư giãn") || t.contains("acoustic") || t.contains("mưa") || t.contains("ngủ")
             }.ifEmpty { homeSongs }
-            "Năng lượng" -> homeSongs.filter { s ->
+            MoodCategory.ENERGY -> homeSongs.filter { s ->
                 val t = (s.title + " " + s.artist).lowercase()
                 t.contains("remix") || t.contains("edm") || t.contains("sôi động") || t.contains("rap") || t.contains("gym") || t.contains("dance")
             }.ifEmpty { homeSongs }
-            "Tập trung" -> homeSongs.filter { s ->
+            MoodCategory.FOCUS -> homeSongs.filter { s ->
                 val t = (s.title + " " + s.artist).lowercase()
                 t.contains("lofi") || t.contains("piano") || t.contains("study") || t.contains("không lời") || t.contains("coffee") || t.contains("chill")
             }.ifEmpty { homeSongs }
-            "Lãng mạn" -> homeSongs.filter { s ->
+            MoodCategory.ROMANCE -> homeSongs.filter { s ->
                 val t = (s.title + " " + s.artist).lowercase()
                 t.contains("yêu") || t.contains("love") || t.contains("ballad") || t.contains("tình") || t.contains("nhẹ nhàng") || t.contains("em")
             }.ifEmpty { homeSongs }
-            "Tiệc tùng" -> homeSongs.filter { s ->
+            MoodCategory.PARTY -> homeSongs.filter { s ->
                 val t = (s.title + " " + s.artist).lowercase()
                 t.contains("vinahouse") || t.contains("bass") || t.contains("remix") || t.contains("club") || t.contains("party") || t.contains("dj")
             }.ifEmpty { homeSongs }
@@ -590,7 +600,7 @@ fun MainAppScreen(
     // Fetch initial live trending music & generate personalized recommendations
     LaunchedEffect(refreshHomeTrigger) {
         isLoadingHome = true
-        val trending = onSearch("Top thịnh hành Việt Nam", AudioSource.YOUTUBE_MUSIC)
+        val trending = onSearch("Top Music Trending", AudioSource.YOUTUBE_MUSIC)
         homeSongs = libraryManager.filterBlocked(trending)
         if (homeSongs.isNotEmpty()) {
             currentTitle = homeSongs.first().title
@@ -638,7 +648,7 @@ fun MainAppScreen(
                     if (isStopAtEndOfTrack) {
                         mediaController?.pause()
                         isStopAtEndOfTrack = false
-                        Toast.makeText(context, "Đã dừng phát khi hết bài hát", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.toast_timer_track_end), Toast.LENGTH_SHORT).show()
                     } else if (repeatMode == Player.REPEAT_MODE_ONE) {
                         mediaController?.seekTo(0)
                         mediaController?.play()
@@ -662,7 +672,7 @@ fun MainAppScreen(
                                     if (filtered.isNotEmpty()) {
                                         songQueue = filtered
                                         playTrack(filtered.first(), isVideoMode)
-                                        Toast.makeText(context, "Phát vô hạn: Đã thêm +${filtered.size} bài tiếp theo", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, context.getString(R.string.toast_infinite_added, filtered.size), Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             } catch (_: Exception) {} finally {
@@ -687,7 +697,7 @@ fun MainAppScreen(
                 if (isStopAtEndOfTrack && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                     mediaController?.pause()
                     isStopAtEndOfTrack = false
-                    Toast.makeText(context, "Đã dừng phát khi hết bài hát", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.toast_timer_track_end), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -762,7 +772,7 @@ fun MainAppScreen(
                                         homeLazyListState.animateScrollToItem(0)
                                     }
                                     refreshHomeTrigger++
-                                    Toast.makeText(context, "Đang làm mới trang chủ...", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.toast_home_refreshing), Toast.LENGTH_SHORT).show()
                                 } else if (selectedNavTab == 1 && index == 1) {
                                     searchQuery = ""
                                     searchResults = emptyList()
@@ -867,13 +877,13 @@ fun MainAppScreen(
                                             ) {
                                                 if (isLoadingHome) {
                                                     CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
-                                                    Text("Đang tải lại trang chủ...", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                    Text(stringResource(R.string.home_refreshing), fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                                 } else if (homePullOffset >= homePullThreshold) {
                                                     Icon(Icons.Default.ArrowDownward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                                                    Text("Thả tay để tải lại", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                    Text(stringResource(R.string.home_release_to_refresh), fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                                 } else {
                                                     Icon(Icons.Default.ArrowDownward, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
-                                                    Text("Kéo xuống để làm mới", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.outline)
+                                                    Text(stringResource(R.string.home_pull_to_refresh), fontSize = 11.5.sp, color = MaterialTheme.colorScheme.outline)
                                                 }
                                             }
                                         }
@@ -885,7 +895,7 @@ fun MainAppScreen(
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                                             Spacer(modifier = Modifier.height(10.dp))
-                                            Text("Đang tải dữ liệu thực từ YouTube Music...", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                                            Text(stringResource(R.string.player_loading_ytm_data), fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
                                         }
                                     }
                                 } else {
@@ -925,7 +935,7 @@ fun MainAppScreen(
                                         if (personalizedSongs.isNotEmpty()) {
                                             item {
                                                 Text(
-                                                    text = "✨ Dành riêng cho bạn (Từ lịch sử xem)",
+                                                    text = stringResource(R.string.home_section_for_you),
                                                     fontWeight = FontWeight.Bold,
                                                     fontSize = 15.sp,
                                                     color = MaterialTheme.colorScheme.onSurface
@@ -949,7 +959,7 @@ fun MainAppScreen(
                                         // Section 2: Quick Picks Grid
                                         item {
                                             Text(
-                                                text = "⚡ Nghe nhanh (Quick Grid)",
+                                                text = stringResource(R.string.home_section_quick_grid),
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 15.sp,
                                                 color = MaterialTheme.colorScheme.onSurface
@@ -980,7 +990,7 @@ fun MainAppScreen(
                                         // Section 3: Visual Album Grid (Horizontal Carousel)
                                         item {
                                             Text(
-                                                text = "🎨 Đề xuất trực quan (Visual Grid)",
+                                                text = stringResource(R.string.home_section_visual_grid),
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 15.sp,
                                                 color = MaterialTheme.colorScheme.onSurface
@@ -1003,7 +1013,7 @@ fun MainAppScreen(
                                         // Section 4: Detailed Track List
                                         item {
                                             Text(
-                                                text = "📋 Bảng xếp hạng thịnh hành (List Detail)",
+                                                text = stringResource(R.string.home_section_trending),
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 15.sp,
                                                 color = MaterialTheme.colorScheme.onSurface
@@ -1020,21 +1030,21 @@ fun MainAppScreen(
                                             isFavorite = libraryManager.isFavorite(song.id),
                                             onToggleFavorite = {
                                                 val isFav = libraryManager.toggleFavorite(song)
-                                                Toast.makeText(context, if (isFav) "Đã thêm vào yêu thích" else "Đã xóa khỏi yêu thích", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, if (isFav) context.getString(R.string.toast_added_to_favorites) else context.getString(R.string.toast_removed_from_favorites), Toast.LENGTH_SHORT).show()
                                             },
                                             onAddToQueue = {
                                                 songQueue = songQueue + song
-                                                Toast.makeText(context, "Đã thêm vào danh sách chờ: ${song.title}", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, context.getString(R.string.toast_added_to_queue, song.title), Toast.LENGTH_SHORT).show()
                                             },
                                             onBlockSong = {
                                                 libraryManager.blockSong(song)
                                                 homeSongs = libraryManager.filterBlocked(homeSongs)
-                                                Toast.makeText(context, "Đã chặn bài hát: ${song.title}", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, context.getString(R.string.toast_blocked_song, song.title), Toast.LENGTH_SHORT).show()
                                             },
                                             onBlockArtist = {
                                                 libraryManager.blockArtist(song.artist)
                                                 homeSongs = libraryManager.filterBlocked(homeSongs)
-                                                Toast.makeText(context, "Đã chặn nghệ sĩ: ${song.artist}", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, context.getString(R.string.toast_blocked_artist, song.artist), Toast.LENGTH_SHORT).show()
                                             }
                                         )
                                     }
@@ -1055,30 +1065,30 @@ fun MainAppScreen(
                             onPlaySong = { song -> playTrack(song) },
                             onAddToQueue = { song ->
                                 songQueue = songQueue + song
-                                Toast.makeText(context, "Đã thêm vào danh sách chờ: ${song.title}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.toast_added_to_queue, song.title), Toast.LENGTH_SHORT).show()
                             },
                             onToggleFavorite = { song ->
                                 val isFav = libraryManager.toggleFavorite(song)
-                                Toast.makeText(context, if (isFav) "Đã thêm vào yêu thích" else "Đã xóa khỏi yêu thích", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, if (isFav) context.getString(R.string.toast_added_to_favorites) else context.getString(R.string.toast_removed_from_favorites), Toast.LENGTH_SHORT).show()
                             },
                             isFavorite = { id -> libraryManager.isFavorite(id) },
                             onBlockSong = { song ->
                                 libraryManager.blockSong(song)
                                 searchResults = libraryManager.filterBlocked(searchResults)
                                 homeSongs = libraryManager.filterBlocked(homeSongs)
-                                Toast.makeText(context, "Đã chặn bài hát: ${song.title}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.toast_blocked_song, song.title), Toast.LENGTH_SHORT).show()
                             },
                             onBlockArtist = { artist ->
                                 libraryManager.blockArtist(artist)
                                 searchResults = libraryManager.filterBlocked(searchResults)
                                 homeSongs = libraryManager.filterBlocked(homeSongs)
-                                Toast.makeText(context, "Đã chặn nghệ sĩ: $artist", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.toast_blocked_artist, artist), Toast.LENGTH_SHORT).show()
                             },
                             onAiSearchClick = {
                                 showAiDialog = true
                                 coroutineScope.launch {
                                     aiGenerator.generatePlaylist(
-                                        userPrompt = searchQuery.ifEmpty { "Nhạc hay tuyển chọn" },
+                                        userPrompt = searchQuery.ifEmpty { context.getString(R.string.home_curated_desc) },
                                         targetSongCount = 20
                                     ) { state ->
                                         aiGenerationState = state
@@ -1101,7 +1111,7 @@ fun MainAppScreen(
                             },
                             onAddToQueue = { song ->
                                 songQueue = songQueue + song
-                                Toast.makeText(context, "Đã thêm vào danh sách chờ: ${song.title}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.toast_added_to_queue, song.title), Toast.LENGTH_SHORT).show()
                             },
                             isGlass = isGlass
                         )
@@ -1197,24 +1207,24 @@ fun MainAppScreen(
                 onSetTimerMinutes = { mins ->
                     sleepTimerSeconds = mins * 60L
                     isStopAtEndOfTrack = false
-                    Toast.makeText(context, "Đã hẹn giờ tắt sau $mins phút", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.toast_timer_set, mins), Toast.LENGTH_SHORT).show()
                 },
                 onSetEndOfTrack = {
                     isStopAtEndOfTrack = true
                     sleepTimerSeconds = null
-                    Toast.makeText(context, "Sẽ dừng khi hết bài hát này", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.toast_timer_track_end), Toast.LENGTH_SHORT).show()
                 },
                 onCancelTimer = {
                     sleepTimerSeconds = null
                     isStopAtEndOfTrack = false
-                    Toast.makeText(context, "Đã hủy hẹn giờ tắt nhạc", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.toast_timer_cancelled), Toast.LENGTH_SHORT).show()
                 },
                 isVideoMode = isVideoMode,
                 onToggleVideoMode = { enableVideo ->
                     val cur = activeSong ?: currentSong
                     val canVideo = cur?.source == AudioSource.YOUTUBE_MUSIC || cur?.source == AudioSource.YOUTUBE_VIDEO
                     if (enableVideo && !canVideo) {
-                        Toast.makeText(context, "Chỉ hỗ trợ chế độ Video cho nguồn YouTube", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.player_video_yt_only), Toast.LENGTH_SHORT).show()
                     } else {
                         isVideoMode = enableVideo
                         cur?.let { song ->
@@ -1243,7 +1253,7 @@ fun MainAppScreen(
                 },
                 onClearQueue = {
                     songQueue = emptyList()
-                    Toast.makeText(context, "Đã xóa toàn bộ danh sách chờ", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.toast_queue_cleared), Toast.LENGTH_SHORT).show()
                 },
                 onRefreshQueue = {
                     val base = activeSong ?: currentSong
@@ -1260,16 +1270,16 @@ fun MainAppScreen(
                             val filtered = libraryManager.filterBlocked(newSongs).filterNot { it.id == base.id }
                             if (filtered.isNotEmpty()) {
                                 songQueue = filtered
-                                Toast.makeText(context, "Đã làm mới danh sách chờ (+${filtered.size} bài)", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.toast_queue_refreshed, filtered.size), Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(context, "Đang tải thêm danh sách đề xuất...", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.toast_home_refreshing), Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
                 },
                 onRecommendQueueAi = {
                     val cur = activeSong ?: currentSong
-                    val prompt = if (cur != null) "Tạo playlist phong cách và giai điệu tương tự '${cur.title}' của ${cur.artist}" else "Playlist tuyển chọn thịnh hành"
+                    val prompt = if (cur != null) context.getString(R.string.player_ai_playlist_prompt, cur.title, cur.artist) else context.getString(R.string.home_section_curated_playlists)
                     showAiDialog = true
                     coroutineScope.launch {
                         aiGenerator.generatePlaylist(
@@ -1293,9 +1303,9 @@ fun MainAppScreen(
                     repeatMode = next
                     mediaController?.repeatMode = next
                     val msg = when (next) {
-                        Player.REPEAT_MODE_ALL -> "Lặp lại danh sách"
-                        Player.REPEAT_MODE_ONE -> "Lặp lại 1 bài"
-                        else -> "Tắt lặp lại"
+                        Player.REPEAT_MODE_ALL -> context.getString(R.string.player_repeat_all)
+                        Player.REPEAT_MODE_ONE -> context.getString(R.string.player_repeat_one)
+                        else -> context.getString(R.string.player_repeat_off)
                     }
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                 },
@@ -1306,9 +1316,9 @@ fun MainAppScreen(
                     mediaController?.shuffleModeEnabled = next
                     if (next && songQueue.isNotEmpty()) {
                         songQueue = songQueue.shuffled()
-                        Toast.makeText(context, "Đã xáo trộn danh sách chờ", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.toast_queue_shuffled), Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(context, if (next) "Bật phát ngẫu nhiên" else "Tắt phát ngẫu nhiên", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, if (next) context.getString(R.string.player_shuffle_on) else context.getString(R.string.player_shuffle_off), Toast.LENGTH_SHORT).show()
                     }
                 },
                 availableVideoQualities = availableVideoQualities,
@@ -1341,7 +1351,7 @@ fun MainAppScreen(
                 },
                 onAddToQueue = { tracks ->
                     songQueue = songQueue + tracks
-                    Toast.makeText(context, "Đã thêm ${tracks.size} bài vào danh sách chờ", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.toast_added_multiple_to_queue, tracks.size), Toast.LENGTH_SHORT).show()
                 },
                 onPlaySingleTrack = { clickedSong, trackList ->
                     songQueue = trackList.filterNot { it.id == clickedSong.id }
@@ -1356,9 +1366,9 @@ fun MainAppScreen(
                         )
                         aiGenerationState = AiGenerationState.Success(
                             playlistTitle = "Playlist: $searchQuery",
-                            playlistDescription = "Tuyển tập tạo bằng thuật toán cục bộ.",
+                            playlistDescription = context.getString(R.string.home_offline_algorithm_desc),
                             tracks = localTracks,
-                            providerUsed = "Thuật toán cục bộ (Offline)"
+                            providerUsed = context.getString(R.string.home_offline_algorithm)
                         )
                     }
                 }
@@ -1429,7 +1439,7 @@ fun QuickPickTile(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = if (isActive && isLoading) "Đang tải luồng..." else song.artist,
+                    text = if (isActive && isLoading) stringResource(R.string.player_loading_stream) else song.artist,
                     fontSize = 10.5.sp,
                     color = if (isActive && isLoading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                     maxLines = 1,
@@ -1513,7 +1523,7 @@ fun AlbumGridCard(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = if (isActive && isLoading) "Đang tải luồng..." else song.artist,
+                text = if (isActive && isLoading) stringResource(R.string.player_loading_stream) else song.artist,
                 fontSize = 10.5.sp,
                 color = if (isActive && isLoading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                 maxLines = 1,
@@ -1619,7 +1629,7 @@ fun SongListCard(
                     Text("•", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
                     if (isActive && isLoading) {
                         Text(
-                            text = "Đang tải luồng...",
+                            text = stringResource(R.string.player_loading_stream),
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
@@ -1654,7 +1664,7 @@ fun SongListCard(
                         IconButton(onClick = onAddToQueue, modifier = Modifier.size(36.dp)) {
                             Icon(
                                 imageVector = Icons.Default.PlaylistAdd,
-                                contentDescription = "Thêm vào danh sách chờ",
+                                contentDescription = stringResource(R.string.action_add_to_queue),
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -1664,7 +1674,7 @@ fun SongListCard(
                         IconButton(onClick = { showMenu = true }, modifier = Modifier.size(36.dp)) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
-                                contentDescription = "Tùy chọn",
+                                contentDescription = stringResource(R.string.action_options),
                                 tint = MaterialTheme.colorScheme.outline,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -1678,7 +1688,7 @@ fun SongListCard(
                 ) {
                     if (onAddToQueue != null) {
                         DropdownMenuItem(
-                            text = { Text("Thêm vào danh sách chờ", fontSize = 12.5.sp) },
+                            text = { Text(stringResource(R.string.action_add_to_queue), fontSize = 12.5.sp) },
                             leadingIcon = { Icon(Icons.Default.PlaylistAdd, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = {
                                 showMenu = false
@@ -1688,7 +1698,7 @@ fun SongListCard(
                     }
                     if (onToggleFavorite != null) {
                         DropdownMenuItem(
-                            text = { Text(if (isFavorite) "Bỏ khỏi yêu thích" else "Thêm vào yêu thích", fontSize = 12.5.sp) },
+                            text = { Text(if (isFavorite) stringResource(R.string.action_remove_from_favorites) else stringResource(R.string.action_add_to_favorites), fontSize = 12.5.sp) },
                             leadingIcon = { Icon(if (isFavorite) Icons.Default.FavoriteBorder else Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = {
                                 showMenu = false
@@ -1698,7 +1708,7 @@ fun SongListCard(
                     }
                     if (onBlockSong != null) {
                         DropdownMenuItem(
-                            text = { Text("Chặn bài hát này", fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error) },
+                            text = { Text(stringResource(R.string.block_song), fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error) },
                             leadingIcon = { Icon(Icons.Default.Block, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
                             onClick = {
                                 showMenu = false
@@ -1708,7 +1718,7 @@ fun SongListCard(
                     }
                     if (onBlockArtist != null) {
                         DropdownMenuItem(
-                            text = { Text("Chặn nghệ sĩ: ${song.artist}", fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error) },
+                            text = { Text(stringResource(R.string.block_artist) + ": ${song.artist}", fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error) },
                             leadingIcon = { Icon(Icons.Default.PersonOff, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
                             onClick = {
                                 showMenu = false
@@ -1834,7 +1844,7 @@ fun M3MiniPlayer(
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    text = if (isResolving) "Đang tải luồng phát..." else artist,
+                    text = if (isResolving) stringResource(R.string.player_loading_stream) else artist,
                     fontSize = 11.sp,
                     color = if (isResolving) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                     fontWeight = if (isResolving) FontWeight.Bold else FontWeight.Normal,
@@ -2128,7 +2138,7 @@ fun M3FullScreenPlayer(
                                     modifier = Modifier.clickable { onToggleVideoMode(false) }
                                 ) {
                                     Text(
-                                        text = "🎵 Only Nhạc",
+                                        text = stringResource(R.string.home_section_music_only),
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (!isVideoMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.outline,
@@ -2163,7 +2173,7 @@ fun M3FullScreenPlayer(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    Icon(Icons.Default.HighQuality, contentDescription = "Chất lượng", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Icon(Icons.Default.HighQuality, contentDescription = stringResource(R.string.player_video_quality), modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                                     Text(
                                         text = selectedVideoQuality?.label ?: "Auto",
                                         fontSize = 11.sp,
@@ -2177,9 +2187,9 @@ fun M3FullScreenPlayer(
                 } else {
                     Text(
                         text = when (currentTab) {
-                            FullPlayerTab.NOW_PLAYING -> "ĐANG PHÁT"
-                            FullPlayerTab.LYRICS -> "LỜI BÀI HÁT"
-                            FullPlayerTab.QUEUE -> "DANH SÁCH CHỜ"
+                            FullPlayerTab.NOW_PLAYING -> stringResource(R.string.player_now_playing)
+                            FullPlayerTab.LYRICS -> stringResource(R.string.player_lyrics)
+                            FullPlayerTab.QUEUE -> stringResource(R.string.player_queue)
                         },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -2204,7 +2214,7 @@ fun M3FullScreenPlayer(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.QueueMusic,
-                                contentDescription = "Danh sách chờ",
+                                contentDescription = stringResource(R.string.player_queue_title),
                                 tint = if (currentTab == FullPlayerTab.QUEUE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -2252,7 +2262,7 @@ fun M3FullScreenPlayer(
                         ) {
                             // Section 1: Đang phát hiện tại
                             Text(
-                                text = "ĐANG PHÁT HIỆN TẠI",
+                                text = stringResource(R.string.player_now_playing),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.primary,
@@ -2292,7 +2302,7 @@ fun M3FullScreenPlayer(
                                         color = MaterialTheme.colorScheme.primary
                                     ) {
                                         Text(
-                                            text = "ĐANG PHÁT",
+                                            text = stringResource(R.string.player_now_playing),
                                             fontSize = 9.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onPrimary,
@@ -2311,7 +2321,7 @@ fun M3FullScreenPlayer(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "TIẾP THEO (${songQueue.size} BÀI)",
+                                    text = stringResource(R.string.player_queue_next_header, songQueue.size),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = MaterialTheme.colorScheme.outline,
@@ -2330,7 +2340,7 @@ fun M3FullScreenPlayer(
                                     ) {
                                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(13.dp))
                                         Spacer(modifier = Modifier.width(3.dp))
-                                        Text("Làm mới", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text(stringResource(R.string.action_refresh), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
 
                                     // Recommend with AI button
@@ -2353,7 +2363,7 @@ fun M3FullScreenPlayer(
                                             onClick = onClearQueue,
                                             modifier = Modifier.size(28.dp)
                                         ) {
-                                            Icon(Icons.Default.DeleteOutline, contentDescription = "Xóa tất cả", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                                            Icon(Icons.Default.DeleteOutline, contentDescription = stringResource(R.string.action_delete), modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
                                         }
                                     }
                                 }
@@ -2376,9 +2386,9 @@ fun M3FullScreenPlayer(
                                             modifier = Modifier.size(48.dp),
                                             tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
                                         )
-                                        Text("Danh sách chờ đang trống", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                                        Text(stringResource(R.string.player_queue_empty), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
                                         Text(
-                                            "Chạm vào biểu tượng (+) ở danh sách bài hát để thêm vào hàng đợi phát.",
+                                            stringResource(R.string.player_queue_empty_desc),
                                             fontSize = 11.5.sp,
                                             color = MaterialTheme.colorScheme.outline,
                                             textAlign = TextAlign.Center,
@@ -2433,7 +2443,7 @@ fun M3FullScreenPlayer(
                                                     onClick = { onRemoveFromQueue(idx) },
                                                     modifier = Modifier.size(32.dp)
                                                 ) {
-                                                    Icon(Icons.Default.Close, contentDescription = "Xóa khỏi danh sách chờ", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
+                                                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_delete), tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
                                                 }
                                             }
                                         }
@@ -2450,7 +2460,7 @@ fun M3FullScreenPlayer(
                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
                                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 2.5.dp)
-                                    Text("Đang tìm và tải lời bài hát...", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(stringResource(R.string.player_loading_lyrics), color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         } else if (lyrics.isEmpty()) {
@@ -2461,9 +2471,9 @@ fun M3FullScreenPlayer(
                                     modifier = Modifier.padding(24.dp)
                                 ) {
                                     Icon(Icons.Default.Lyrics, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-                                    Text("Không có lời bài hát", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+                                    Text(stringResource(R.string.player_no_lyrics), fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
                                     Text(
-                                        "Bài hát hoặc video này chưa có dữ liệu lời bài hát.",
+                                        stringResource(R.string.player_no_lyrics_desc),
                                         fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.outline,
                                         textAlign = TextAlign.Center
@@ -2601,7 +2611,7 @@ fun M3FullScreenPlayer(
                                                 color = MaterialTheme.colorScheme.primary
                                             )
                                             Text(
-                                                text = "Đang tải luồng phát...",
+                                                text = stringResource(R.string.player_loading_stream),
                                                 color = Color.White,
                                                 fontSize = 12.5.sp,
                                                 fontWeight = FontWeight.SemiBold
@@ -2678,7 +2688,7 @@ fun M3FullScreenPlayer(
                             Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (sleepTimerSeconds != null && sleepTimerSeconds > 0) formatTime(sleepTimerSeconds * 1000) else "Hẹn giờ",
+                                text = if (sleepTimerSeconds != null && sleepTimerSeconds > 0) formatTime(sleepTimerSeconds * 1000) else stringResource(R.string.player_timer_title),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -2749,7 +2759,7 @@ fun M3FullScreenPlayer(
                             ) {
                                 Icon(
                                     Icons.Default.Lyrics,
-                                    contentDescription = "Lời bài hát",
+                                    contentDescription = stringResource(R.string.player_lyrics_title),
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -2765,7 +2775,7 @@ fun M3FullScreenPlayer(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Toàn màn hình ↗",
+                                    text = stringResource(R.string.player_video_fullscreen),
                                     fontSize = 10.5.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.outline
@@ -2793,7 +2803,7 @@ fun M3FullScreenPlayer(
                         modifier = Modifier.padding(bottom = 4.dp)
                     ) {
                         Text(
-                            text = "Tua đến: ${formatTime(displayedTimeMs)}",
+                            text = stringResource(R.string.player_seek_to, formatTime(displayedTimeMs)),
                             color = MaterialTheme.colorScheme.onPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.5.sp,
@@ -2887,9 +2897,9 @@ fun M3FullScreenPlayer(
                     Column {
                         Text(
                             text = when (currentTab) {
-                                FullPlayerTab.NOW_PLAYING -> if (lyrics.isNotEmpty()) "Chạm để xem Lời bài hát & Danh sách chờ" else "Chạm để mở Danh sách chờ"
-                                FullPlayerTab.LYRICS -> "Chạm để mở Danh sách chờ (${songQueue.size} bài)"
-                                FullPlayerTab.QUEUE -> "Chạm để quay lại giao diện Đang phát"
+                                FullPlayerTab.NOW_PLAYING -> if (lyrics.isNotEmpty()) stringResource(R.string.player_tap_to_view_lyrics_queue) else stringResource(R.string.player_tap_to_open_queue_simple)
+                                FullPlayerTab.LYRICS -> stringResource(R.string.player_tap_to_open_queue, songQueue.size)
+                                FullPlayerTab.QUEUE -> stringResource(R.string.player_tap_to_return_playing)
                             },
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -2897,9 +2907,9 @@ fun M3FullScreenPlayer(
                         )
                         Text(
                             text = when (currentTab) {
-                                FullPlayerTab.NOW_PLAYING -> if (lyrics.isNotEmpty()) "${lyrics.size} câu lời đồng bộ • Chạm đúp để tua ${skipDurationSeconds}s" else "Chạm đúp trái/phải để tua ${skipDurationSeconds}s"
-                                FullPlayerTab.LYRICS -> "Lời bài hát chạy theo thời gian thực"
-                                FullPlayerTab.QUEUE -> if (songQueue.isNotEmpty()) "${songQueue.size} bài tiếp theo trong hàng đợi" else "Hàng đợi trống"
+                                FullPlayerTab.NOW_PLAYING -> if (lyrics.isNotEmpty()) stringResource(R.string.player_lyrics_count_seek, lyrics.size, skipDurationSeconds) else stringResource(R.string.player_double_tap_seek_hint, skipDurationSeconds)
+                                FullPlayerTab.LYRICS -> stringResource(R.string.player_lyrics_realtime)
+                                FullPlayerTab.QUEUE -> if (songQueue.isNotEmpty()) stringResource(R.string.player_queue_count_desc, songQueue.size) else stringResource(R.string.player_queue_empty)
                             },
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -2934,7 +2944,7 @@ fun VolumeBoostDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Đóng", fontWeight = FontWeight.Bold) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), fontWeight = FontWeight.Bold) }
         },
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2943,13 +2953,13 @@ fun VolumeBoostDialog(
                     contentDescription = null,
                     tint = if (isHighVolume) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                 )
-                Text("Âm lượng ứng dụng ($currentVolume%)", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text(stringResource(R.string.player_volume_title, currentVolume), fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
-                    text = "Tùy biến âm lượng từ 0% đến 300% (kết hợp DSP Gain Boost khi vượt quá 100%).",
+                    text = stringResource(R.string.player_volume_desc),
                     fontSize = 12.5.sp,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -2966,12 +2976,12 @@ fun VolumeBoostDialog(
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("0%", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                    Text("100% (Chuẩn)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Text("300% (Max DSP)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.player_volume_standard), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.player_volume_max_dsp), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                 }
 
                 // Quick preset buttons: 25%, 50%, 75%, 100%, 125%, 150%, 200%, 250%, 300%
-                Text("Tùy chọn nhanh:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(stringResource(R.string.player_volume_quick), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -2999,7 +3009,7 @@ fun VolumeBoostDialog(
                         Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("⚠️", fontSize = 18.sp)
                             Text(
-                                text = "Cảnh báo âm lượng cao (≥ 150%): Mức âm lượng khuyếch đại DSP Boost mạnh có thể gây hại thính giác nếu nghe qua tai nghe liên tục và có thể gây méo âm thanh trên loa nhỏ.",
+                                text = stringResource(R.string.player_volume_warning),
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                                 lineHeight = 16.sp
@@ -3026,18 +3036,18 @@ fun PlaybackSpeedDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Xong", fontWeight = FontWeight.Bold) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_done), fontWeight = FontWeight.Bold) }
         },
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("Tốc độ phát (${String.format("%.2f", currentSpeed)}x)", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text(stringResource(R.string.player_speed_title, String.format("%.2f", currentSpeed)), fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    text = "Điều chỉnh tốc độ phát lại từ 0.25x đến 3.0x bằng thanh trượt hoặc nút cộng/trừ 0.05x.",
+                    text = stringResource(R.string.player_speed_desc),
                     fontSize = 12.5.sp,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -3079,7 +3089,7 @@ fun PlaybackSpeedDialog(
                     }
                 }
 
-                Text("Chọn nhanh (bước 0.25x):", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                Text(stringResource(R.string.player_speed_presets), fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
 
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -3115,15 +3125,15 @@ fun SleepTimerDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Đóng", fontWeight = FontWeight.Bold) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), fontWeight = FontWeight.Bold) }
         },
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Timer, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text(
                     text = if (remainingSeconds != null && remainingSeconds > 0)
-                        "Hẹn giờ (${formatTime(remainingSeconds * 1000)})"
-                    else "Hẹn giờ tắt nhạc",
+                        stringResource(R.string.player_timer_title) + " (${formatTime(remainingSeconds * 1000)})"
+                    else stringResource(R.string.player_timer_title),
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
@@ -3142,17 +3152,17 @@ fun SleepTimerDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("Đang chạy hẹn giờ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                                Text("Tắt sau ${formatTime(remainingSeconds * 1000)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Text(stringResource(R.string.player_timer_running), fontSize = 11.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                Text(stringResource(R.string.player_timer_remaining, formatTime(remainingSeconds * 1000)), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             }
                             FilledTonalButton(onClick = { onCancelTimer(); onDismiss() }) {
-                                Text("Hủy")
+                                Text(stringResource(R.string.action_cancel))
                             }
                         }
                     }
                 }
 
-                Text("Tùy chọn nhanh:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(stringResource(R.string.player_volume_quick), fontWeight = FontWeight.Bold, fontSize = 12.sp)
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -3164,7 +3174,7 @@ fun SleepTimerDialog(
                             modifier = Modifier.weight(1f),
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
                         ) {
-                            Text("${mins}p", fontSize = 11.5.sp)
+                            Text(stringResource(R.string.player_timer_minutes, mins), fontSize = 11.5.sp)
                         }
                     }
                 }
@@ -3175,12 +3185,12 @@ fun SleepTimerDialog(
                 ) {
                     Icon(Icons.Default.SkipNext, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Dừng khi phát hết bài hát này", fontSize = 12.sp)
+                    Text(stringResource(R.string.player_timer_stop_after_track), fontSize = 12.sp)
                 }
 
                 HorizontalDivider()
 
-                Text("Tùy chỉnh: ${customMinutes.toInt()} phút", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(stringResource(R.string.player_timer_custom, customMinutes.toInt()), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Slider(
                     value = customMinutes,
                     onValueChange = { customMinutes = it },
@@ -3190,7 +3200,7 @@ fun SleepTimerDialog(
                     onClick = { onSetTimerMinutes(customMinutes.toInt()); onDismiss() },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Bắt đầu hẹn giờ (${customMinutes.toInt()} phút)")
+                    Text(stringResource(R.string.player_timer_start_custom, customMinutes.toInt()))
                 }
             }
         }
@@ -3214,24 +3224,24 @@ fun VideoQualityDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Đóng", fontWeight = FontWeight.Bold) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), fontWeight = FontWeight.Bold) }
         },
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.HighQuality, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("Chất lượng video", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text(stringResource(R.string.player_video_quality), fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Chọn độ phân giải video mong muốn:",
+                    text = stringResource(R.string.player_video_quality_desc),
                     fontSize = 12.5.sp,
                     color = MaterialTheme.colorScheme.outline
                 )
                 if (availableQualities.isEmpty()) {
                     Text(
-                        text = "Không có độ phân giải thay thế hoặc đang dùng nguồn mặc định.",
+                        text = stringResource(R.string.player_video_no_alt_qualities),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.outline
                     )

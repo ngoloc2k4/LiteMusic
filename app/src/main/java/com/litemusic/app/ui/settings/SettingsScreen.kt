@@ -121,7 +121,7 @@ fun SettingsScreen(
                 val freedBytes = AudioCacheManager.clearAllCache(context)
                 val freedMb = String.format(java.util.Locale.US, "%.1f", freedBytes.toDouble() / (1024.0 * 1024.0))
                 usedCacheMb = 0.0
-                Toast.makeText(context, "Đã dọn dẹp $freedMb MB bộ nhớ đệm!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.settings_cache_freed, freedMb), Toast.LENGTH_SHORT).show()
                 onClearCache()
             },
             onDismiss = { showCacheDialog = false }
@@ -176,13 +176,13 @@ fun SettingsScreen(
                         }
                         Column {
                             Text(
-                                text = "Cài đặt hệ thống",
+                                text = stringResource(R.string.settings_title),
                                 fontSize = 21.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Tùy biến trải nghiệm âm nhạc cá nhân hóa",
+                                text = stringResource(R.string.settings_subtitle),
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.outline
                             )
@@ -208,14 +208,14 @@ fun SettingsScreen(
 
         // Section 1: Giao diện & Chủ đề (Appearance)
         item {
-            SettingsGroupHeader(title = "GIAO DIỆN & MÀU SẮC")
+            SettingsGroupHeader(title = stringResource(R.string.settings_group_appearance))
             Spacer(modifier = Modifier.height(6.dp))
             SettingsGroupCard(isGlass = isGlass) {
                 SettingsRow(
                     icon = Icons.Default.Palette,
                     iconBgColor = MaterialTheme.colorScheme.primaryContainer,
                     iconTint = MaterialTheme.colorScheme.primary,
-                    title = "Chủ đề & Bảng màu",
+                    title = stringResource(R.string.settings_theme_title),
                     subtitle = "${currentThemeStyle.displayName} • ${currentThemeMode.displayName}",
                     onClick = { showThemeDialog = true },
                     trailingContent = {
@@ -272,7 +272,7 @@ fun SettingsScreen(
 
         // Section 2: Âm thanh & Phát nhạc (Audio & Playback Engine)
         item {
-            SettingsGroupHeader(title = "ÂM THANH & PHÁT NHẠC")
+            SettingsGroupHeader(title = stringResource(R.string.settings_group_audio))
             Spacer(modifier = Modifier.height(6.dp))
             SettingsGroupCard(isGlass = isGlass) {
                 // DSP Loudness
@@ -280,8 +280,8 @@ fun SettingsScreen(
                     icon = Icons.Default.GraphicEq,
                     iconBgColor = MaterialTheme.colorScheme.secondaryContainer,
                     iconTint = MaterialTheme.colorScheme.secondary,
-                    title = "Cân bằng âm lượng DSP (-14 LUFS)",
-                    subtitle = "Chuẩn hóa âm lượng tự động, chống giật âm giữa các nguồn",
+                    title = stringResource(R.string.settings_dsp_title),
+                    subtitle = stringResource(R.string.settings_dsp_subtitle),
                     trailingContent = {
                         Switch(
                             checked = isDspEnabled,
@@ -297,8 +297,8 @@ fun SettingsScreen(
                     icon = Icons.Default.FastForward,
                     iconBgColor = MaterialTheme.colorScheme.tertiaryContainer,
                     iconTint = MaterialTheme.colorScheme.tertiary,
-                    title = "Cử chỉ chạm đúp để tua",
-                    subtitle = "Tua nhanh hoặc lùi khi chạm 2 lần vào màn hình phát",
+                    title = stringResource(R.string.settings_skip_duration_title),
+                    subtitle = stringResource(R.string.settings_skip_duration_subtitle),
                     onClick = { showSkipDialog = true },
                     trailingContent = {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -326,8 +326,8 @@ fun SettingsScreen(
                     icon = Icons.Default.AllInclusive,
                     iconBgColor = MaterialTheme.colorScheme.primaryContainer,
                     iconTint = MaterialTheme.colorScheme.primary,
-                    title = "Chế độ phát vô hạn (Infinite Mode)",
-                    subtitle = if (isInfinitePlayback) "Tự động gợi ý nối tiếp +$infiniteBatchSize bài khi hết danh sách" else "Đang tắt phát vô hạn",
+                    title = stringResource(R.string.settings_infinite_title),
+                    subtitle = if (isInfinitePlayback) stringResource(R.string.settings_infinite_subtitle, infiniteBatchSize) else stringResource(R.string.settings_infinite_off),
                     onClick = if (isInfinitePlayback) { { showInfiniteBatchDialog = true } } else null,
                     trailingContent = {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -361,8 +361,8 @@ fun SettingsScreen(
                     icon = Icons.Default.QueueMusic,
                     iconBgColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                     iconTint = MaterialTheme.colorScheme.onSurface,
-                    title = "Tự động nối bài liên quan",
-                    subtitle = "Tạo danh sách chờ tương đồng khi mở 1 bài hát đơn lẻ",
+                    title = stringResource(R.string.settings_auto_related_title),
+                    subtitle = stringResource(R.string.settings_auto_related_subtitle),
                     trailingContent = {
                         Switch(
                             checked = isAutoQueueRelated,
@@ -378,8 +378,8 @@ fun SettingsScreen(
                     icon = Icons.Default.Block,
                     iconBgColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
                     iconTint = MaterialTheme.colorScheme.error,
-                    title = "Danh sách chặn (Kênh, Nghệ sĩ, Bài hát)",
-                    subtitle = "Quản lý từ khóa và nghệ sĩ bị lọc khỏi ứng dụng",
+                    title = stringResource(R.string.settings_blocklist_title),
+                    subtitle = stringResource(R.string.settings_blocklist_subtitle),
                     onClick = onOpenBlocklist,
                     trailingContent = {
                         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(18.dp))
@@ -390,7 +390,7 @@ fun SettingsScreen(
 
         // Section 3: Dữ liệu & Bộ nhớ (Storage & Cache Management)
         item {
-            SettingsGroupHeader(title = "BỘ NHỚ & DỮ LIỆU")
+            SettingsGroupHeader(title = stringResource(R.string.manage_cache).uppercase())
             Spacer(modifier = Modifier.height(6.dp))
             SettingsGroupCard(isGlass = isGlass) {
                 val usedFormatted = String.format(java.util.Locale.US, "%.1f", usedCacheMb)
@@ -400,8 +400,8 @@ fun SettingsScreen(
                     icon = Icons.Default.Storage,
                     iconBgColor = MaterialTheme.colorScheme.primaryContainer,
                     iconTint = MaterialTheme.colorScheme.primary,
-                    title = "Bộ nhớ đệm âm thanh (Audio Cache)",
-                    subtitle = "Đã dùng: $usedFormatted MB / $maxCacheMb MB ($percent%)",
+                    title = stringResource(R.string.settings_cache_dialog_title),
+                    subtitle = stringResource(R.string.settings_cache_used_summary, usedFormatted, maxCacheMb, percent),
                     onClick = { showCacheDialog = true },
                     trailingContent = {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -431,15 +431,15 @@ fun SettingsScreen(
 
         // Section 5: Nhà phát triển & Gỡ lỗi (Developer Console & Localhost)
         item {
-            SettingsGroupHeader(title = "CÔNG CỤ NHÀ PHÁT TRIỂN & CHẨN ĐOÁN")
+            SettingsGroupHeader(title = stringResource(R.string.settings_group_dev))
             Spacer(modifier = Modifier.height(6.dp))
             SettingsGroupCard(isGlass = isGlass) {
                 SettingsRow(
                     icon = Icons.Default.BugReport,
                     iconBgColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                     iconTint = MaterialTheme.colorScheme.primary,
-                    title = "Chế độ Gỡ lỗi (Debug & Logcat Hub)",
-                    subtitle = if (isDebugMode) "Máy chủ nội bộ đang chạy: $debugServerUrl" else "Khởi chạy local HTTP server để theo dõi log trực tiếp",
+                    title = stringResource(R.string.settings_debug_title),
+                    subtitle = if (isDebugMode) stringResource(R.string.settings_debug_server_running, debugServerUrl) else stringResource(R.string.settings_debug_subtitle),
                     trailingContent = {
                         Switch(
                             checked = isDebugMode,
@@ -470,7 +470,7 @@ fun SettingsScreen(
                             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Text("🟢", fontSize = 10.sp)
-                                    Text("Web Dashboard Localhost:", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                    Text(stringResource(R.string.debug_dashboard_title), fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                 }
                                 Text(
                                     text = debugServerUrl,
@@ -479,7 +479,7 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "Mở link trên trình duyệt để theo dõi logcat, xem lỗi hoặc lọc theo tag.",
+                                    text = stringResource(R.string.settings_debug_server_hint),
                                     fontSize = 10.5.sp,
                                     color = MaterialTheme.colorScheme.outline
                                 )
@@ -497,7 +497,7 @@ fun SettingsScreen(
                             ) {
                                 Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Sao chép Logcat", fontSize = 11.5.sp)
+                                Text(stringResource(R.string.settings_copy_logcat), fontSize = 11.5.sp)
                             }
                             OutlinedButton(
                                 onClick = onClearLogcat,
@@ -508,7 +508,7 @@ fun SettingsScreen(
                             ) {
                                 Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Xóa Log", fontSize = 11.5.sp)
+                                Text(stringResource(R.string.settings_clear_logcat), fontSize = 11.5.sp)
                             }
                         }
                     }
@@ -518,7 +518,7 @@ fun SettingsScreen(
 
         // Section 6: Đóng góp & Thông tin (Community & About)
         item {
-            SettingsGroupHeader(title = "CỘNG ĐỒNG & THÔNG TIN")
+            SettingsGroupHeader(title = stringResource(R.string.settings_group_community))
             Spacer(modifier = Modifier.height(6.dp))
             SettingsGroupCard(isGlass = isGlass) {
                 // Crowdin Translation
@@ -526,14 +526,14 @@ fun SettingsScreen(
                     icon = Icons.Default.Translate,
                     iconBgColor = MaterialTheme.colorScheme.secondaryContainer,
                     iconTint = MaterialTheme.colorScheme.secondary,
-                    title = "Đóng góp dịch thuật (Crowdin)",
-                    subtitle = "Hỗ trợ bản địa hóa LiteMusic sang nhiều ngôn ngữ",
+                    title = stringResource(R.string.settings_crowdin_title),
+                    subtitle = stringResource(R.string.settings_crowdin_subtitle),
                     onClick = {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://crowdin.com/project/litemusic"))
                         try {
                             context.startActivity(intent)
                         } catch (_: Exception) {
-                            Toast.makeText(context, "Mở trình duyệt: https://crowdin.com/project/litemusic", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, context.getString(R.string.settings_crowdin_open), Toast.LENGTH_LONG).show()
                         }
                     },
                     trailingContent = {
@@ -548,7 +548,7 @@ fun SettingsScreen(
                     icon = Icons.Default.Info,
                     iconBgColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                     iconTint = MaterialTheme.colorScheme.outline,
-                    title = "LiteMusic Open Source",
+                    title = stringResource(R.string.settings_about_title),
                     subtitle = "Jetpack Compose M3 • Android Media3 ExoPlayer 1.5.1",
                     trailingContent = {
                         Surface(
@@ -704,13 +704,13 @@ fun ThemeCustomizationDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             Button(onClick = onDismiss, shape = RoundedCornerShape(12.dp)) {
-                Text("Xong", fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.action_done), fontWeight = FontWeight.Bold)
             }
         },
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("Tùy biến Giao diện", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text(stringResource(R.string.settings_theme_dialog_title), fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
         },
         text = {
@@ -719,14 +719,14 @@ fun ThemeCustomizationDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Category 1: Phong cách thiết kế
-                Text("1. Phong cách thiết kế", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.settings_theme_section_style), fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     val styles = listOf(
-                        AppThemeStyle.MATERIAL_3 to ("M3 Chuẩn" to Icons.Default.Layers),
-                        AppThemeStyle.LIQUID_GLASS to ("Liquid Glass" to Icons.Default.BlurOn)
+                        AppThemeStyle.MATERIAL_3 to (stringResource(R.string.settings_theme_style_standard) to Icons.Default.Layers),
+                        AppThemeStyle.LIQUID_GLASS to (stringResource(R.string.settings_theme_style_liquid) to Icons.Default.BlurOn)
                     )
                     styles.forEach { (style, pair) ->
                         val isSelected = currentThemeStyle == style
@@ -757,12 +757,12 @@ fun ThemeCustomizationDialog(
                 }
 
                 // Category 2: Chế độ hiển thị
-                Text("2. Chế độ hiển thị", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.settings_theme_section_mode), fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 val modes = listOf(
-                    AppThemeMode.DARK_OLED to "Tối OLED (#000)",
-                    AppThemeMode.DARK_STANDARD to "Tối chuẩn M3",
-                    AppThemeMode.LIGHT to "Sáng (Light Mode)",
-                    AppThemeMode.SYSTEM to "Theo hệ thống Android"
+                    AppThemeMode.DARK_OLED to stringResource(R.string.settings_theme_mode_oled),
+                    AppThemeMode.DARK_STANDARD to stringResource(R.string.settings_theme_mode_dark),
+                    AppThemeMode.LIGHT to stringResource(R.string.settings_theme_mode_light),
+                    AppThemeMode.SYSTEM to stringResource(R.string.settings_theme_mode_system)
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     modes.forEach { (mode, label) ->
@@ -795,7 +795,7 @@ fun ThemeCustomizationDialog(
                 }
 
                 // Category 3: Bảng màu Monet & Điểm nhấn
-                Text("3. Bảng màu điểm nhấn", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.settings_theme_section_palette), fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -863,16 +863,16 @@ fun CacheManagementDialog(
                 },
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Lưu & Đóng", fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.action_save_and_close), fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Hủy") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("Bộ nhớ đệm âm thanh", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text(stringResource(R.string.settings_cache_dialog_title), fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
         },
         text = {
@@ -889,7 +889,7 @@ fun CacheManagementDialog(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Dung lượng sử dụng:", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                            Text(stringResource(R.string.settings_cache_used_label), fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
                             Text("$usedFormatted MB / ${localMax.toInt()} MB ($percent%)", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
                         }
 
@@ -901,7 +901,7 @@ fun CacheManagementDialog(
                         )
 
                         Text(
-                            text = "Khi bộ nhớ đầy, hệ thống tự động xóa các bài hát cũ nhất để nhường chỗ cho bài mới tải.",
+                            text = stringResource(R.string.settings_cache_dialog_note),
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.outline,
                             lineHeight = 15.sp
@@ -919,7 +919,7 @@ fun CacheManagementDialog(
                 ) {
                     Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Dọn sạch toàn bộ bộ nhớ đệm", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.settings_cache_clear_all), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -930,7 +930,7 @@ fun CacheManagementDialog(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Giới hạn dung lượng tối đa:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.settings_cache_limit_label), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         Text("${localMax.toInt()} MB", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
                     }
 
@@ -976,10 +976,10 @@ fun SkipDurationDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Đóng", fontWeight = FontWeight.Bold) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), fontWeight = FontWeight.Bold) }
         },
         title = {
-            Text("Thời gian chạm đúp để tua", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            Text(stringResource(R.string.settings_skip_duration_title), fontWeight = FontWeight.Bold, fontSize = 17.sp)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1002,7 +1002,7 @@ fun SkipDurationDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "$sec giây",
+                                text = stringResource(R.string.settings_seconds_unit, sec),
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 fontSize = 13.5.sp,
                                 color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
@@ -1032,15 +1032,15 @@ fun InfiniteBatchDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Đóng", fontWeight = FontWeight.Bold) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), fontWeight = FontWeight.Bold) }
         },
         title = {
-            Text("Số lượng bài hát gợi ý phát vô hạn", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            Text(stringResource(R.string.settings_infinite_batch_label), fontWeight = FontWeight.Bold, fontSize = 17.sp)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Khi phát đến bài cuối cùng trong hàng đợi, hệ thống sẽ tự động tìm kiếm và nối tiếp thêm số bài hát này:",
+                    text = stringResource(R.string.settings_infinite_batch_desc),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -1063,7 +1063,7 @@ fun InfiniteBatchDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "+$count bài tiếp theo",
+                                text = stringResource(R.string.settings_batch_unit, count),
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 fontSize = 13.5.sp,
                                 color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface

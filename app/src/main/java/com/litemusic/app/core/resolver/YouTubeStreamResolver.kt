@@ -37,7 +37,7 @@ class YouTubeStreamResolver(
     }
 
     suspend fun getTrending(): List<Song> {
-        return search("Top thịnh hành Việt Nam")
+        return search("Top Music Trending")
     }
 
     /**

@@ -37,7 +37,7 @@ class AiPlaylistGenerator(
         val rawCandidates = searchParallel(intent.searchQueries)
 
         if (rawCandidates.isEmpty()) {
-            onStateChange(AiGenerationState.Error("Không tìm thấy bài hát nào từ YouTube và SoundCloud.", canFallbackLocal = false))
+            onStateChange(AiGenerationState.Error("No tracks found from YouTube and SoundCloud.", canFallbackLocal = false))
             return@withContext emptyList()
         }
 
@@ -64,7 +64,7 @@ class AiPlaylistGenerator(
     private suspend fun parseIntent(prompt: String, targetCount: Int): MusicIntent {
         val defaultIntent = MusicIntent(
             title = "Playlist: $prompt",
-            description = "Playlist được chọn lọc theo yêu cầu: \"$prompt\"",
+            description = "Curated playlist for: \"$prompt\"",
             searchQueries = listOf(prompt, "$prompt chill", "$prompt acoustic"),
             targetCount = targetCount
         )
@@ -188,6 +188,6 @@ class AiPlaylistGenerator(
 
         // Local Heuristic Fallback
         val fallback = LocalHeuristicRanker.rankAndFilter(candidates, prompt, targetCount)
-        return Pair(fallback, "Thuật toán cục bộ (Local Fallback)")
+        return Pair(fallback, "Local Fallback Algorithm")
     }
 }

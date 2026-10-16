@@ -11,22 +11,26 @@ import java.util.Locale
 object LocaleHelper {
 
     fun applyLocale(context: Context, language: String) {
-        if (language == "system") {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                val localeManager = context.getSystemService(LocaleManager::class.java)
-                localeManager?.applicationLocales = LocaleList.getEmptyLocaleList()
+        val locale = if (language == "system") {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                android.content.res.Resources.getSystem().configuration.locales[0]
             } else {
-                val defaultLocale = Locale.getDefault()
-                updateResources(context, defaultLocale)
+                @Suppress("DEPRECATION")
+                android.content.res.Resources.getSystem().configuration.locale
             }
         } else {
-            val locale = parseLocale(language)
-            Locale.setDefault(locale)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                val localeManager = context.getSystemService(LocaleManager::class.java)
-                localeManager?.applicationLocales = LocaleList.forLanguageTags(language.replace("-r", "-"))
+            parseLocale(language)
+        }
+
+        Locale.setDefault(locale)
+        updateResources(context, locale)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val localeManager = context.getSystemService(LocaleManager::class.java)
+            if (language == "system") {
+                localeManager?.applicationLocales = LocaleList.getEmptyLocaleList()
             } else {
-                updateResources(context, locale)
+                localeManager?.applicationLocales = LocaleList.forLanguageTags(language.replace("-r", "-"))
             }
         }
     }
@@ -59,10 +63,9 @@ object LocaleHelper {
         config.setLocale(locale)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             config.setLocales(LocaleList(locale))
-            return context.createConfigurationContext(config)
         }
         @Suppress("DEPRECATION")
         context.resources.updateConfiguration(config, context.resources.displayMetrics)
-        return context
+        return context.createConfigurationContext(config)
     }
 }

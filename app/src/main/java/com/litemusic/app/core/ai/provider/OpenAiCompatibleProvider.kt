@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 
 class OpenAiCompatibleProvider(
     override val id: String = "groq",
-    override val displayName: String = "Groq (Siêu tốc / Llama 3.3)",
+    override val displayName: String = "Groq (Ultra-fast / Llama 3.3)",
     private val defaultBaseUrl: String = "https://api.groq.com/openai/v1",
     private val getCustomBaseUrl: (() -> String)? = null
 ) : LlmProvider {
@@ -87,7 +87,7 @@ class OpenAiCompatibleProvider(
 
     override suspend fun generate(apiKey: String, request: LlmRequest): LlmResult = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
-            return@withContext LlmResult.Error("API Key trống. Vui lòng cấu hình API Key trong Cài đặt.", isRetryable = false)
+            return@withContext LlmResult.Error("API Key is missing. Please configure in Settings.", isRetryable = false)
         }
 
         val chosenModel = request.model?.ifBlank { null } ?: fallbackModels.first()
@@ -136,9 +136,9 @@ class OpenAiCompatibleProvider(
                 val isRetryable = (code == 429 || code >= 500)
                 val errMsg = try {
                     val errJson = JSONObject(responseBody).optJSONObject("error")
-                    errJson?.optString("message", "Lỗi API $code: $responseBody") ?: "Lỗi API $code: $responseBody"
+                    errJson?.optString("message", "API Error $code: $responseBody") ?: "API Error $code: $responseBody"
                 } catch (_: Exception) {
-                    "Lỗi API HTTP $code"
+                    "API HTTP Error $code"
                 }
                 return@withContext LlmResult.Error(errMsg, isRetryable = isRetryable, statusCode = code)
             }
@@ -146,7 +146,7 @@ class OpenAiCompatibleProvider(
             val respJson = JSONObject(responseBody)
             val choices = respJson.optJSONArray("choices")
             if (choices == null || choices.length() == 0) {
-                return@withContext LlmResult.Error("Không có nội dung trả về từ $displayName", isRetryable = false)
+                return@withContext LlmResult.Error("No content returned from $displayName", isRetryable = false)
             }
 
             val firstChoice = choices.getJSONObject(0)
@@ -161,7 +161,7 @@ class OpenAiCompatibleProvider(
                 totalTokens = totalTokens
             )
         } catch (e: Exception) {
-            LlmResult.Error(e.message ?: "Lỗi kết nối tới $displayName", isRetryable = true)
+            LlmResult.Error(e.message ?: "Connection error to $displayName", isRetryable = true)
         }
     }
 }

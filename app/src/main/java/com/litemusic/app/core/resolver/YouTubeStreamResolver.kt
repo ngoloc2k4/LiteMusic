@@ -26,14 +26,34 @@ class YouTubeStreamResolver(
     private val playerUrl = "https://www.youtube.com/youtubei/v1/player"
 
     private fun sanitizeThumbnailUrl(rawUrl: String?, videoId: String): String {
+        val cleanId = videoId.removePrefix("ytv_").trim()
+        val canonicalFallback = if (cleanId.isNotEmpty() && cleanId.length in 8..15) {
+            "https://i.ytimg.com/vi/$cleanId/hqdefault.jpg"
+        } else ""
+
         if (rawUrl.isNullOrBlank()) {
-            return "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+            return canonicalFallback
         }
-        return when {
+
+        var url = when {
             rawUrl.startsWith("//") -> "https:$rawUrl"
+            rawUrl.startsWith("/vi/") -> "https://i.ytimg.com$rawUrl"
+            rawUrl.startsWith("/") -> "https://i.ytimg.com$rawUrl"
             !rawUrl.startsWith("http://") && !rawUrl.startsWith("https://") -> "https://$rawUrl"
             else -> rawUrl
         }
+
+        // If from dead or rate-limited Invidious instances, switch directly to reliable YouTube CDN
+        if (url.contains("invidious") || url.contains("vern.cc") || url.contains("f5.si") || url.contains("drgns.space")) {
+            return if (canonicalFallback.isNotEmpty()) canonicalFallback else url
+        }
+
+        // If YouTube Music small artwork, upgrade to high-res square
+        if (url.contains("googleusercontent.com") && url.contains("=w")) {
+            url = url.replace(Regex("=w\\d+-h\\d+[^&?]*"), "=w544-h544-l90-rj")
+        }
+
+        return url
     }
 
     suspend fun getTrending(): List<Song> {

@@ -25,6 +25,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 import com.litemusic.app.core.library.LibraryManager
 import com.litemusic.app.core.model.Song
 
@@ -570,25 +572,27 @@ fun LibrarySongRow(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (song.thumbnailUrl.isNotEmpty()) {
-                AsyncImage(
-                    model = song.thumbnailUrl,
-                    contentDescription = song.title,
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(RoundedCornerShape(10.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("🎵", fontSize = 20.sp)
-                }
-            }
+            val cleanVid = song.sourceId.removePrefix("ytv_").ifEmpty { song.id.removePrefix("ytv_") }
+            val effectiveArt = if (song.thumbnailUrl.isNotBlank() && !song.thumbnailUrl.contains("invidious") && !song.thumbnailUrl.contains("f5.si")) {
+                song.thumbnailUrl
+            } else if (cleanVid.length in 8..15) {
+                "https://i.ytimg.com/vi/$cleanVid/hqdefault.jpg"
+            } else song.thumbnailUrl
+
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(effectiveArt.ifEmpty { R.drawable.ic_music_note })
+                    .crossfade(true)
+                    .placeholder(R.drawable.ic_music_note)
+                    .error(R.drawable.ic_music_note)
+                    .fallback(R.drawable.ic_music_note)
+                    .build(),
+                contentDescription = song.title,
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(10.dp)),
+                contentScale = ContentScale.Crop
+            )
 
             Spacer(modifier = Modifier.width(12.dp))
 

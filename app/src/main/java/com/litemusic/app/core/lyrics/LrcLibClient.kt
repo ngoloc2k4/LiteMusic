@@ -73,7 +73,12 @@ class LrcLibClient(
         emptyList()
     }
 
+    private val browserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
     private fun fetchLrcLib(title: String, artist: String): List<LyricLine> {
+        if (title.isBlank()) return emptyList()
+
+        // 1. Exact match attempt
         try {
             val encTrack = URLEncoder.encode(title, "UTF-8")
             val encArtist = URLEncoder.encode(artist, "UTF-8")
@@ -81,27 +86,111 @@ class LrcLibClient(
 
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "LiteMusic/1.0.0 (https://github.com/ngoloc2k4/LiteMusic)")
+                .header("User-Agent", browserUserAgent)
                 .build()
 
             val response = client.newCall(request).execute()
-            if (!response.isSuccessful) return emptyList()
-
-            val body = response.body?.string() ?: return emptyList()
-            val json = JSONObject(body)
-
-            val synced = json.optString("syncedLyrics", "")
-            if (synced.isNotEmpty()) {
-                return parseLrc(synced)
-            }
-
-            val plain = json.optString("plainLyrics", "")
-            if (plain.isNotEmpty()) {
-                return parsePlain(plain, 0L)
+            if (response.isSuccessful) {
+                val body = response.body?.string() ?: ""
+                if (body.isNotEmpty()) {
+                    val json = JSONObject(body)
+                    val synced = json.optString("syncedLyrics", "")
+                    if (synced.isNotEmpty()) return parseLrc(synced)
+                    val plain = json.optString("plainLyrics", "")
+                    if (plain.isNotEmpty()) return parsePlain(plain, 0L)
+                }
             }
         } catch (e: Exception) {
-            Log.w(tag, "LRCLIB error for $title - $artist: ${e.message}")
+            Log.w(tag, "LRCLIB get error for $title - $artist: ${e.message}")
         }
+
+        // 2. Flexible search by track & artist
+        try {
+            val encTrack = URLEncoder.encode(title, "UTF-8")
+            val encArtist = URLEncoder.encode(artist, "UTF-8")
+            val url = "https://lrclib.net/api/search?track_name=$encTrack&artist_name=$encArtist"
+
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", browserUserAgent)
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                val body = response.body?.string() ?: ""
+                val lyrics = parseLrcLibSearchResults(body)
+                if (lyrics.isNotEmpty()) return lyrics
+            }
+        } catch (e: Exception) {
+            Log.w(tag, "LRCLIB search track+artist error: ${e.message}")
+        }
+
+        // 3. Search by combined query (title + artist)
+        try {
+            val combined = "$title $artist".trim()
+            val encQuery = URLEncoder.encode(combined, "UTF-8")
+            val url = "https://lrclib.net/api/search?q=$encQuery"
+
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", browserUserAgent)
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                val body = response.body?.string() ?: ""
+                val lyrics = parseLrcLibSearchResults(body)
+                if (lyrics.isNotEmpty()) return lyrics
+            }
+        } catch (e: Exception) {
+            Log.w(tag, "LRCLIB search query error: ${e.message}")
+        }
+
+        // 4. Search by title alone if title has multiple words
+        if (title.contains(" ")) {
+            try {
+                val encQuery = URLEncoder.encode(title.trim(), "UTF-8")
+                val url = "https://lrclib.net/api/search?q=$encQuery"
+
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", browserUserAgent)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: ""
+                    val lyrics = parseLrcLibSearchResults(body)
+                    if (lyrics.isNotEmpty()) return lyrics
+                }
+            } catch (_: Exception) {}
+        }
+
+        return emptyList()
+    }
+
+    private fun parseLrcLibSearchResults(jsonString: String): List<LyricLine> {
+        try {
+            val arr = org.json.JSONArray(jsonString)
+            var plainCandidate: String? = null
+            for (i in 0 until arr.length().coerceAtMost(8)) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val synced = obj.optString("syncedLyrics", "")
+                if (synced.isNotBlank()) {
+                    val parsed = parseLrc(synced)
+                    if (parsed.isNotEmpty()) return parsed
+                }
+                if (plainCandidate == null) {
+                    val plain = obj.optString("plainLyrics", "")
+                    if (plain.isNotBlank()) {
+                        plainCandidate = plain
+                    }
+                }
+            }
+            if (plainCandidate != null) {
+                return parsePlain(plainCandidate, 0L)
+            }
+        } catch (_: Exception) {}
         return emptyList()
     }
 
@@ -113,7 +202,7 @@ class LrcLibClient(
 
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "LiteMusic/1.0.0")
+                .header("User-Agent", browserUserAgent)
                 .build()
 
             val response = client.newCall(request).execute()
@@ -139,7 +228,7 @@ class LrcLibClient(
 
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "LiteMusic/1.0.0")
+                .header("User-Agent", browserUserAgent)
                 .build()
 
             val response = client.newCall(request).execute()

@@ -26,6 +26,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 import com.litemusic.app.core.model.AudioSource
 import com.litemusic.app.core.model.Song
 import com.litemusic.app.feature.aimusic.ui.AiSearchTile
@@ -98,9 +100,18 @@ fun SearchScreen(
             placeholder = { Text(stringResource(R.string.search_hint), fontSize = 13.5.sp) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = stringResource(R.string.nav_search), tint = MaterialTheme.colorScheme.primary) },
             trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { onSearchQueryChange("") }) {
-                        Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.action_clear), tint = MaterialTheme.colorScheme.outline)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { onSearchQueryChange("") }) {
+                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.action_clear), tint = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                    IconButton(onClick = onAiSearchClick) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = stringResource(R.string.ai_playlist_recommend),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             },
@@ -139,6 +150,14 @@ fun SearchScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 contentPadding = PaddingValues(bottom = 90.dp)
             ) {
+                // Featured AI Search Card
+                item {
+                    AiSearchTile(
+                        query = "",
+                        onClick = onAiSearchClick
+                    )
+                }
+
                 // Section: Recent searches
                 item {
                     Text(
@@ -240,6 +259,11 @@ fun SearchScreen(
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.outline
                         )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        AiSearchTile(
+                            query = searchQuery,
+                            onClick = onAiSearchClick
+                        )
                     }
                 }
             } else {
@@ -286,15 +310,13 @@ fun SearchScreen(
                         }
                     }
 
-                    // Bottom AI Search Tile - only shown for playlists, vibes, or compilations (not for single song/artist search)
-                    if (isVibeOrPlaylistQuery(searchQuery)) {
-                        item {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            AiSearchTile(
-                                query = searchQuery,
-                                onClick = onAiSearchClick
-                            )
-                        }
+                    // Bottom AI Search Tile
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        AiSearchTile(
+                            query = searchQuery,
+                            onClick = onAiSearchClick
+                        )
                     }
                 }
             }
@@ -379,27 +401,29 @@ fun TopResultHeroCard(
                 color = MaterialTheme.colorScheme.primary
             )
             Spacer(modifier = Modifier.height(10.dp))
+            val context = LocalContext.current
+            val cleanVid = song.sourceId.removePrefix("ytv_").ifEmpty { song.id.removePrefix("ytv_") }
+            val effectiveThumb = if (song.thumbnailUrl.isNotBlank() && !song.thumbnailUrl.contains("invidious") && !song.thumbnailUrl.contains("f5.si")) {
+                song.thumbnailUrl
+            } else if (cleanVid.length in 8..15) {
+                "https://i.ytimg.com/vi/$cleanVid/hqdefault.jpg"
+            } else song.thumbnailUrl
+
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (song.thumbnailUrl.isNotEmpty()) {
-                    AsyncImage(
-                        model = song.thumbnailUrl,
-                        contentDescription = song.title,
-                        modifier = Modifier
-                            .size(60.dp)
-                            .clip(RoundedCornerShape(12.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(60.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("🎵", fontSize = 24.sp)
-                    }
-                }
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(effectiveThumb.ifEmpty { R.drawable.ic_music_note })
+                        .crossfade(true)
+                        .placeholder(R.drawable.ic_music_note)
+                        .error(R.drawable.ic_music_note)
+                        .fallback(R.drawable.ic_music_note)
+                        .build(),
+                    contentDescription = song.title,
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
+                )
 
                 Spacer(modifier = Modifier.width(12.dp))
 
@@ -506,25 +530,28 @@ fun SearchSongCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Artwork
-            if (song.thumbnailUrl.isNotEmpty()) {
-                AsyncImage(
-                    model = song.thumbnailUrl,
-                    contentDescription = song.title,
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(RoundedCornerShape(10.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("🎵", fontSize = 20.sp)
-                }
-            }
+            val context = LocalContext.current
+            val cleanVid = song.sourceId.removePrefix("ytv_").ifEmpty { song.id.removePrefix("ytv_") }
+            val effectiveThumb = if (song.thumbnailUrl.isNotBlank() && !song.thumbnailUrl.contains("invidious") && !song.thumbnailUrl.contains("f5.si")) {
+                song.thumbnailUrl
+            } else if (cleanVid.length in 8..15) {
+                "https://i.ytimg.com/vi/$cleanVid/hqdefault.jpg"
+            } else song.thumbnailUrl
+
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(effectiveThumb.ifEmpty { R.drawable.ic_music_note })
+                    .crossfade(true)
+                    .placeholder(R.drawable.ic_music_note)
+                    .error(R.drawable.ic_music_note)
+                    .fallback(R.drawable.ic_music_note)
+                    .build(),
+                contentDescription = song.title,
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(10.dp)),
+                contentScale = ContentScale.Crop
+            )
 
             Spacer(modifier = Modifier.width(12.dp))
 

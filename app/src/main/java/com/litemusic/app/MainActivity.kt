@@ -52,6 +52,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.google.common.util.concurrent.ListenableFuture
 import com.litemusic.app.core.audio.PlaybackService
 import com.litemusic.app.core.lyrics.LrcLibClient
@@ -1178,8 +1179,20 @@ fun MainAppScreen(
         // Full Screen Player Sheet with Synced Lyrics & Queue
         AnimatedVisibility(
             visible = isPlayerSheetOpen,
-            enter = slideInVertically(initialOffsetY = { it }),
-            exit = slideOutVertically(targetOffsetY = { it })
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = spring(
+                    dampingRatio = 0.82f,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            ),
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
         ) {
             M3FullScreenPlayer(
                 currentSong = activeSong ?: currentSong,
@@ -1333,6 +1346,17 @@ fun MainAppScreen(
                     searchQuery = query
                     selectedNavTab = 1
                 },
+                onAiSearch = { prompt ->
+                    showAiDialog = true
+                    coroutineScope.launch {
+                        aiGenerator.generatePlaylist(
+                            userPrompt = prompt,
+                            targetSongCount = 20
+                        ) { state ->
+                            aiGenerationState = state
+                        }
+                    }
+                },
                 onDismiss = { showHomeSearchDialog = false }
             )
         }
@@ -1377,6 +1401,16 @@ fun MainAppScreen(
     }
 }
 
+fun getEffectiveArtworkUrl(url: String, sourceId: String = "", songId: String = ""): String {
+    if (url.isNotBlank() && !url.contains("invidious") && !url.contains("f5.si") && !url.contains("vern.cc") && !url.contains("drgns.space")) {
+        return url
+    }
+    val cleanVid = sourceId.removePrefix("ytv_").ifEmpty { songId.removePrefix("ytv_") }
+    return if (cleanVid.length in 8..15) {
+        "https://i.ytimg.com/vi/$cleanVid/hqdefault.jpg"
+    } else url
+}
+
 @Composable
 fun QuickPickTile(
     song: Song,
@@ -1402,19 +1436,19 @@ fun QuickPickTile(
                 modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                if (song.thumbnailUrl.isNotEmpty()) {
-                    AsyncImage(
-                        model = song.thumbnailUrl,
-                        contentDescription = song.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                        contentAlignment = Alignment.Center
-                    ) { Text("🎵", fontSize = 18.sp) }
-                }
+                val effectiveArt = getEffectiveArtworkUrl(song.thumbnailUrl, song.sourceId, song.id)
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(effectiveArt.ifEmpty { R.drawable.ic_music_note })
+                        .crossfade(true)
+                        .placeholder(R.drawable.ic_music_note)
+                        .error(R.drawable.ic_music_note)
+                        .fallback(R.drawable.ic_music_note)
+                        .build(),
+                    contentDescription = song.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
                 if (isActive && isLoading) {
                     Box(
                         modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)),
@@ -1478,16 +1512,19 @@ fun AlbumGridCard(
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center
             ) {
-                if (song.thumbnailUrl.isNotEmpty()) {
-                    AsyncImage(
-                        model = song.thumbnailUrl,
-                        contentDescription = song.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Text("🎨", fontSize = 36.sp)
-                }
+                val effectiveArt = getEffectiveArtworkUrl(song.thumbnailUrl, song.sourceId, song.id)
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(effectiveArt.ifEmpty { R.drawable.ic_music_note })
+                        .crossfade(true)
+                        .placeholder(R.drawable.ic_music_note)
+                        .error(R.drawable.ic_music_note)
+                        .fallback(R.drawable.ic_music_note)
+                        .build(),
+                    contentDescription = song.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -1579,19 +1616,19 @@ fun SongListCard(
                 modifier = Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                if (song.thumbnailUrl.isNotEmpty()) {
-                    AsyncImage(
-                        model = song.thumbnailUrl,
-                        contentDescription = song.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                        contentAlignment = Alignment.Center
-                    ) { Text("♫", fontSize = 20.sp) }
-                }
+                val effectiveArt = getEffectiveArtworkUrl(song.thumbnailUrl, song.sourceId, song.id)
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(effectiveArt.ifEmpty { R.drawable.ic_music_note })
+                        .crossfade(true)
+                        .placeholder(R.drawable.ic_music_note)
+                        .error(R.drawable.ic_music_note)
+                        .fallback(R.drawable.ic_music_note)
+                        .build(),
+                    contentDescription = song.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
 
                 // Loading animation spinner when active song is resolving / buffering
                 if (isActive && isLoading) {
@@ -1827,19 +1864,19 @@ fun M3MiniPlayer(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (artworkUrl.isNotEmpty()) {
-                AsyncImage(
-                    model = artworkUrl,
-                    contentDescription = title,
-                    modifier = Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
-                ) { Text("▶", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold) }
-            }
+            val effectiveArt = getEffectiveArtworkUrl(artworkUrl)
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(effectiveArt.ifEmpty { R.drawable.ic_music_note })
+                    .crossfade(true)
+                    .placeholder(R.drawable.ic_music_note)
+                    .error(R.drawable.ic_music_note)
+                    .fallback(R.drawable.ic_music_note)
+                    .build(),
+                contentDescription = title,
+                modifier = Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)),
+                contentScale = ContentScale.Crop
+            )
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -2025,7 +2062,7 @@ fun M3FullScreenPlayer(
                 available: Offset,
                 source: NestedScrollSource
             ): Offset {
-                if (available.y > 15f && currentTab != FullPlayerTab.NOW_PLAYING) {
+                if (available.y > 10f && currentTab != FullPlayerTab.NOW_PLAYING) {
                     currentTab = FullPlayerTab.NOW_PLAYING
                     return available
                 }
@@ -2034,53 +2071,51 @@ fun M3FullScreenPlayer(
         }
     }
 
+    var accumulatedPlayerDragY by remember { mutableFloatStateOf(0f) }
+
     Surface(
         modifier = Modifier
             .fillMaxSize()
             .offset { IntOffset(0, if (currentTab == FullPlayerTab.NOW_PLAYING) animatedDragOffsetY.roundToInt() else 0) }
-            .pointerInput(lyrics.size, currentTab) {
-                detectVerticalDragGestures(
-                    onDragEnd = {
-                        if (dragOffsetY > 130f) {
-                            if (currentTab != FullPlayerTab.NOW_PLAYING) {
-                                currentTab = FullPlayerTab.NOW_PLAYING
-                            } else {
-                                onClose()
-                            }
-                        }
-                        dragOffsetY = 0f
-                    },
-                    onDragCancel = {
-                        dragOffsetY = 0f
-                    },
-                    onVerticalDrag = { change, dragAmount ->
-                        change.consume()
-                        if (dragAmount > 0) {
-                            // Dragging DOWN
-                            if (currentTab != FullPlayerTab.NOW_PLAYING) {
-                                dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
-                                if (dragOffsetY > 80f) {
-                                    currentTab = FullPlayerTab.NOW_PLAYING
-                                    dragOffsetY = 0f
-                                }
-                            } else {
-                                dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
-                            }
-                        } else if (dragAmount < -25f) {
-                            // Dragging UP
-                            if (currentTab == FullPlayerTab.NOW_PLAYING) {
-                                if (lyrics.isNotEmpty() || isLyricsLoading) {
-                                    currentTab = FullPlayerTab.LYRICS
+            .then(
+                if (currentTab == FullPlayerTab.NOW_PLAYING) {
+                    Modifier.pointerInput(lyrics.size, isLyricsLoading) {
+                        detectVerticalDragGestures(
+                            onDragStart = {
+                                accumulatedPlayerDragY = 0f
+                            },
+                            onVerticalDrag = { change, dragAmount ->
+                                change.consume()
+                                accumulatedPlayerDragY += dragAmount
+                                if (accumulatedPlayerDragY > 0) {
+                                    // Dragging DOWN -> smoothly translate player sheet following finger
+                                    dragOffsetY = accumulatedPlayerDragY
                                 } else {
-                                    currentTab = FullPlayerTab.QUEUE
+                                    // Dragging UP -> if passed threshold (-45f), switch to lyrics or queue
+                                    dragOffsetY = 0f
+                                    if (accumulatedPlayerDragY < -45f) {
+                                        currentTab = if (lyrics.isNotEmpty() || isLyricsLoading) FullPlayerTab.LYRICS else FullPlayerTab.QUEUE
+                                        accumulatedPlayerDragY = 0f
+                                    }
                                 }
-                            } else if (currentTab == FullPlayerTab.LYRICS) {
-                                currentTab = FullPlayerTab.QUEUE
+                            },
+                            onDragEnd = {
+                                if (dragOffsetY > 110f) {
+                                    onClose()
+                                }
+                                dragOffsetY = 0f
+                                accumulatedPlayerDragY = 0f
+                            },
+                            onDragCancel = {
+                                dragOffsetY = 0f
+                                accumulatedPlayerDragY = 0f
                             }
-                        }
+                        )
                     }
-                )
-            },
+                } else {
+                    Modifier
+                }
+            ),
         color = MaterialTheme.colorScheme.background
     ) {
         Column(
@@ -2094,6 +2129,16 @@ fun M3FullScreenPlayer(
                     .fillMaxWidth()
                     .clickable(enabled = currentTab != FullPlayerTab.NOW_PLAYING) {
                         currentTab = FullPlayerTab.NOW_PLAYING
+                    }
+                    .pointerInput(currentTab) {
+                        if (currentTab != FullPlayerTab.NOW_PLAYING) {
+                            detectVerticalDragGestures { change, dragAmount ->
+                                if (dragAmount > 10f) {
+                                    change.consume()
+                                    currentTab = FullPlayerTab.NOW_PLAYING
+                                }
+                            }
+                        }
                     }
                     .padding(vertical = 4.dp),
                 contentAlignment = Alignment.Center
@@ -2109,7 +2154,18 @@ fun M3FullScreenPlayer(
 
             // Top Bar
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(currentTab) {
+                        if (currentTab != FullPlayerTab.NOW_PLAYING) {
+                            detectVerticalDragGestures { change, dragAmount ->
+                                if (dragAmount > 12f) {
+                                    change.consume()
+                                    currentTab = FullPlayerTab.NOW_PLAYING
+                                }
+                            }
+                        }
+                    },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -2220,24 +2276,22 @@ fun M3FullScreenPlayer(
                         }
                     }
 
-                    // Lyrics Button (visible if lyrics exist OR currently loading)
-                    if (lyrics.isNotEmpty() || isLyricsLoading) {
-                        IconButton(onClick = {
-                            currentTab = if (currentTab == FullPlayerTab.LYRICS) FullPlayerTab.NOW_PLAYING else FullPlayerTab.LYRICS
-                        }) {
-                            if (isLyricsLoading && lyrics.isEmpty()) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = if (currentTab == FullPlayerTab.LYRICS) Icons.Default.MusicNote else Icons.Default.Lyrics,
-                                    contentDescription = "Toggle Lyrics",
-                                    tint = if (currentTab == FullPlayerTab.LYRICS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                )
-                            }
+                    // Lyrics Button (always accessible like YouTube Music / Spotify)
+                    IconButton(onClick = {
+                        currentTab = if (currentTab == FullPlayerTab.LYRICS) FullPlayerTab.NOW_PLAYING else FullPlayerTab.LYRICS
+                    }) {
+                        if (isLyricsLoading && lyrics.isEmpty()) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = if (currentTab == FullPlayerTab.LYRICS) Icons.Default.MusicNote else Icons.Default.Lyrics,
+                                contentDescription = "Toggle Lyrics",
+                                tint = if (currentTab == FullPlayerTab.LYRICS) MaterialTheme.colorScheme.primary else (if (lyrics.isNotEmpty()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
+                            )
                         }
                     }
                 }
@@ -2279,19 +2333,19 @@ fun M3FullScreenPlayer(
                                     modifier = Modifier.padding(10.dp).fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    if (artworkUrl.isNotEmpty()) {
-                                        AsyncImage(
-                                            model = artworkUrl,
-                                            contentDescription = title,
-                                            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                    } else {
-                                        Box(
-                                            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primary),
-                                            contentAlignment = Alignment.Center
-                                        ) { Text("♫", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold) }
-                                    }
+                                    val effectiveArt = getEffectiveArtworkUrl(artworkUrl)
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(effectiveArt.ifEmpty { R.drawable.ic_music_note })
+                                            .crossfade(true)
+                                            .placeholder(R.drawable.ic_music_note)
+                                            .error(R.drawable.ic_music_note)
+                                            .fallback(R.drawable.ic_music_note)
+                                            .build(),
+                                        contentDescription = title,
+                                        modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)),
+                                        contentScale = ContentScale.Crop
+                                    )
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -2421,19 +2475,19 @@ fun M3FullScreenPlayer(
                                                     color = MaterialTheme.colorScheme.outline,
                                                     modifier = Modifier.width(22.dp)
                                                 )
-                                                if (qSong.thumbnailUrl.isNotEmpty()) {
-                                                    AsyncImage(
-                                                        model = qSong.thumbnailUrl,
-                                                        contentDescription = qSong.title,
-                                                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)),
-                                                        contentScale = ContentScale.Crop
-                                                    )
-                                                } else {
-                                                    Box(
-                                                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                                                        contentAlignment = Alignment.Center
-                                                    ) { Text("♫", fontSize = 16.sp) }
-                                                }
+                                                val effectiveArt = getEffectiveArtworkUrl(qSong.thumbnailUrl, qSong.sourceId, qSong.id)
+                                                AsyncImage(
+                                                    model = ImageRequest.Builder(LocalContext.current)
+                                                        .data(effectiveArt.ifEmpty { R.drawable.ic_music_note })
+                                                        .crossfade(true)
+                                                        .placeholder(R.drawable.ic_music_note)
+                                                        .error(R.drawable.ic_music_note)
+                                                        .fallback(R.drawable.ic_music_note)
+                                                        .build(),
+                                                    contentDescription = qSong.title,
+                                                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)),
+                                                    contentScale = ContentScale.Crop
+                                                )
                                                 Spacer(modifier = Modifier.width(10.dp))
                                                 Column(modifier = Modifier.weight(1f)) {
                                                     Text(qSong.title, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -2568,24 +2622,21 @@ fun M3FullScreenPlayer(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center
                                 ) {
-                                    if (artworkUrl.isNotEmpty()) {
-                                        AsyncImage(
-                                            model = artworkUrl,
-                                            contentDescription = title,
-                                            modifier = Modifier
-                                                .size(260.dp)
-                                                .clip(RoundedCornerShape(28.dp)),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                    } else {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(260.dp)
-                                                .clip(RoundedCornerShape(28.dp))
-                                                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                                            contentAlignment = Alignment.Center
-                                        ) { Text("🎸", fontSize = 80.sp) }
-                                    }
+                                    val effectiveArt = getEffectiveArtworkUrl(artworkUrl)
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(effectiveArt.ifEmpty { R.drawable.ic_music_note })
+                                            .crossfade(true)
+                                            .placeholder(R.drawable.ic_music_note)
+                                            .error(R.drawable.ic_music_note)
+                                            .fallback(R.drawable.ic_music_note)
+                                            .build(),
+                                        contentDescription = title,
+                                        modifier = Modifier
+                                            .size(260.dp)
+                                            .clip(RoundedCornerShape(28.dp)),
+                                        contentScale = ContentScale.Crop
+                                    )
                                 }
                             }
 
@@ -3297,6 +3348,7 @@ fun VideoQualityDialog(
 @Composable
 fun HomeSearchDialog(
     onSearchSubmit: (String) -> Unit,
+    onAiSearch: ((String) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
@@ -3312,16 +3364,32 @@ fun HomeSearchDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Button(
-                onClick = {
-                    if (query.isNotBlank()) {
-                        onSearchSubmit(query.trim())
-                        onDismiss()
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (onAiSearch != null) {
+                    FilledTonalButton(
+                        onClick = {
+                            val prompt = query.trim().ifEmpty { "Nhạc hay tuyển chọn" }
+                            onAiSearch(prompt)
+                            onDismiss()
+                        },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("✨ AI", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
-                },
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(stringResource(R.string.quick_search), fontWeight = FontWeight.Bold)
+                }
+                Button(
+                    onClick = {
+                        if (query.isNotBlank()) {
+                            onSearchSubmit(query.trim())
+                            onDismiss()
+                        }
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(stringResource(R.string.quick_search), fontWeight = FontWeight.Bold)
+                }
             }
         },
         dismissButton = {

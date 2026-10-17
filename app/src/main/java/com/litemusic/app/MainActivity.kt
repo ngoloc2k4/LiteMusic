@@ -776,20 +776,21 @@ fun MainAppScreen(
     // Deduplicated sections data across Quick Picks, Recommended, Trending, and Discovery
     val homeSections = remember(selectedMoodFilter, currentMoodPool, personalizedSongs) {
         val seen = mutableSetOf<String>()
+        val distinctPool = currentMoodPool.distinctBy { it.id }
 
-        val qp = currentMoodPool.take(4).also { list -> list.forEach { seen.add(it.id) } }
+        val qp = distinctPool.take(4).also { list -> list.forEach { seen.add(it.id) } }
 
         // Section 2: For ALL, use personalized recommendations from history + pool.
         // For Mood categories, populate strictly from mood pool so recommendations match the mood!
         val rec = if (selectedMoodFilter == MoodCategory.ALL) {
-            val recCandidates = personalizedSongs.filterNot { it.id in seen } + currentMoodPool.filterNot { it.id in seen }
+            val recCandidates = (personalizedSongs + distinctPool).filterNot { it.id in seen }.distinctBy { it.id }
             recCandidates.take(6).also { list -> list.forEach { seen.add(it.id) } }
         } else {
-            currentMoodPool.filterNot { it.id in seen }.take(6).also { list -> list.forEach { seen.add(it.id) } }
+            distinctPool.filterNot { it.id in seen }.take(6).also { list -> list.forEach { seen.add(it.id) } }
         }
 
-        val tr = currentMoodPool.filterNot { it.id in seen }.take(8).also { list -> list.forEach { seen.add(it.id) } }
-        val disc = currentMoodPool.filterNot { it.id in seen }.also { list -> list.forEach { seen.add(it.id) } }
+        val tr = distinctPool.filterNot { it.id in seen }.take(8).also { list -> list.forEach { seen.add(it.id) } }
+        val disc = distinctPool.filterNot { it.id in seen }.also { list -> list.forEach { seen.add(it.id) } }
 
         HomeSectionsData(
             quickPicks = qp,
@@ -1095,42 +1096,6 @@ fun MainAppScreen(
 
                                 Spacer(modifier = Modifier.height(10.dp))
 
-                                // Pull-to-refresh floating indicator pill
-                                AnimatedVisibility(
-                                    visible = homePullOffset > 15f || isRefreshingHome,
-                                    enter = fadeIn() + expandVertically(),
-                                    exit = fadeOut() + shrinkVertically()
-                                ) {
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Surface(
-                                            shape = RoundedCornerShape(20.dp),
-                                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-                                            shadowElevation = 4.dp
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                if (isRefreshingHome) {
-                                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
-                                                    Text(stringResource(R.string.home_refreshing), fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                                } else if (homePullOffset >= homePullThreshold) {
-                                                    Icon(Icons.Default.ArrowDownward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                                                    Text(stringResource(R.string.home_release_to_refresh), fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                                } else {
-                                                    Icon(Icons.Default.ArrowDownward, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
-                                                    Text(stringResource(R.string.home_pull_to_refresh), fontSize = 11.5.sp, color = MaterialTheme.colorScheme.outline)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
                                 if (isLoadingHome && homeSongs.isEmpty()) {
                                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1249,7 +1214,7 @@ fun MainAppScreen(
                                                 Spacer(modifier = Modifier.height(8.dp))
 
                                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                                                    items(homeSections.recommended, key = { it.id }) { song ->
+                                                    itemsIndexed(homeSections.recommended, key = { index, song -> "rec_${song.id}_$index" }) { _, song ->
                                                         val isSongActive = activeSong?.id == song.id
                                                         AlbumGridCard(
                                                             song = song,
@@ -1275,7 +1240,7 @@ fun MainAppScreen(
                                                 Spacer(modifier = Modifier.height(4.dp))
                                             }
 
-                                            itemsIndexed(homeSections.trending, key = { _, s -> s.id }) { index, song ->
+                                            itemsIndexed(homeSections.trending, key = { index, s -> "trend_${s.id}_$index" }) { index, song ->
                                                 val isSongActive = activeSong?.id == song.id
                                                 SongListCard(
                                                     song = song,
@@ -1319,7 +1284,7 @@ fun MainAppScreen(
                                                 Spacer(modifier = Modifier.height(4.dp))
                                             }
 
-                                            items(combinedDiscovery, key = { "disc_${it.id}" }) { song ->
+                                            itemsIndexed(combinedDiscovery, key = { index, song -> "disc_${song.id}_$index" }) { _, song ->
                                                 val isSongActive = activeSong?.id == song.id
                                                 SongListCard(
                                                     song = song,
@@ -1376,6 +1341,59 @@ fun MainAppScreen(
                                                 }
                                             }
                                         }
+                                }
+                            }
+
+                            // Floating circular pull-to-refresh popup badge
+                            val isIndicatorVisible = homePullOffset > 8f || isRefreshingHome
+                            val indicatorOffsetDp by animateFloatAsState(
+                                targetValue = when {
+                                    isRefreshingHome -> 60f
+                                    homePullOffset > 0f -> (10f + (homePullOffset * 0.42f)).coerceAtMost(75f)
+                                    else -> 0f
+                                },
+                                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                label = "pull_indicator_offset"
+                            )
+
+                            AnimatedVisibility(
+                                visible = isIndicatorVisible,
+                                enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.5f),
+                                exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.5f),
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .offset(y = indicatorOffsetDp.dp)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                                    shadowElevation = 8.dp,
+                                    modifier = Modifier.size(42.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isRefreshingHome) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(22.dp),
+                                                strokeWidth = 2.5.dp,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        } else {
+                                            val progressFraction = (homePullOffset / homePullThreshold).coerceIn(0f, 1f)
+                                            val rotation = progressFraction * 180f
+                                            Icon(
+                                                imageVector = Icons.Default.ArrowDownward,
+                                                contentDescription = null,
+                                                tint = if (homePullOffset >= homePullThreshold) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                                modifier = Modifier
+                                                    .size(20.dp)
+                                                    .graphicsLayer { rotationZ = rotation }
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

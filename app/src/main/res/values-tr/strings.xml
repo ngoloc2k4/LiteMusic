@@ -28,10 +28,10 @@
     <string name="home_pull_to_refresh">Pull down to refresh</string>
     <string name="home_release_to_refresh">Release to reload</string>
     <string name="home_refreshing">Refreshing home page...</string>
-    <string name="home_section_for_you">✨ Made For You (Watch History)</string>
-    <string name="home_section_visual_grid">🎨 Visual Recommendations</string>
-    <string name="home_section_music_only">🎵 Music Only</string>
-    <string name="home_section_trending">📋 Trending Chart</string>
+    <string name="home_section_for_you">Made For You</string>
+    <string name="home_section_visual_grid">Visual Recommendations</string>
+    <string name="home_section_music_only">Music Only</string>
+    <string name="home_section_trending">Trending Chart</string>
     <string name="home_section_top_trending">Top Trending Tracks</string>
     <string name="home_section_curated_playlists">Curated Playlists</string>
     <string name="home_curated_desc">Hand-picked popular tracks</string>
@@ -237,7 +237,7 @@
     <string name="language_nl">Nederlands</string>
     <string name="language_uk">Українська</string>
     <string name="language_sv">Svenska</string>
-    <string name="home_section_quick_grid">⚡ Quick Picks</string>
+    <string name="home_section_quick_grid">Quick Picks</string>
     <string name="player_tap_to_open_queue_simple">Tap to open Queue</string>
     <string name="player_volume_standard">100% (Standard)</string>
     <string name="player_volume_max_dsp">300% (Max DSP)</string>

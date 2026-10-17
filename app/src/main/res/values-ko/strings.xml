@@ -28,10 +28,10 @@
     <string name="home_pull_to_refresh">당겨서 새로고침</string>
     <string name="home_release_to_refresh">놓아서 새로고침</string>
     <string name="home_refreshing">홈 새로고침 중...</string>
-    <string name="home_section_for_you">✨ 맞춤 추천 (시청 기록 기반)</string>
-    <string name="home_section_visual_grid">🎨 비주얼 추천</string>
-    <string name="home_section_music_only">🎵 순수 음악</string>
-    <string name="home_section_trending">📋 인기 차트</string>
+    <string name="home_section_for_you">맞춤 추천</string>
+    <string name="home_section_visual_grid">비주얼 추천</string>
+    <string name="home_section_music_only">순수 음악</string>
+    <string name="home_section_trending">인기 차트</string>
     <string name="home_section_top_trending">인기 급상승 음악</string>
     <string name="home_section_curated_playlists">추천 플레이리스트</string>
     <string name="home_curated_desc">엄선된 인기 음악</string>
@@ -237,7 +237,7 @@
     <string name="language_nl">Nederlands</string>
     <string name="language_uk">Українська</string>
     <string name="language_sv">Svenska</string>
-    <string name="home_section_quick_grid">⚡ 빠른 선택</string>
+    <string name="home_section_quick_grid">빠른 선택</string>
     <string name="player_tap_to_open_queue_simple">탭하여 대기열 열기</string>
     <string name="player_volume_standard">100% (표준)</string>
     <string name="player_volume_max_dsp">300% (최대 DSP)</string>

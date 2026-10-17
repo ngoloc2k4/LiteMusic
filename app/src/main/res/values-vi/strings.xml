@@ -28,10 +28,12 @@
     <string name="home_pull_to_refresh">Kéo xuống để làm mới</string>
     <string name="home_release_to_refresh">Thả tay để tải lại</string>
     <string name="home_refreshing">Đang làm mới trang chủ...</string>
-    <string name="home_section_for_you">✨ Dành riêng cho bạn (Từ lịch sử xem)</string>
-    <string name="home_section_visual_grid">🎨 Đề xuất trực quan (Visual Grid)</string>
-    <string name="home_section_music_only">🎵 Only Nhạc</string>
-    <string name="home_section_trending">📋 Bảng xếp hạng thịnh hành (List Detail)</string>
+    <string name="home_section_for_you">Gợi ý cho bạn</string>
+    <string name="home_section_infinite_feed">Khám phá thêm</string>
+    <string name="home_section_loading_more">Đang tải thêm bài hát…</string>
+    <string name="home_section_visual_grid">Đề xuất trực quan</string>
+    <string name="home_section_music_only">Only Nhạc</string>
+    <string name="home_section_trending">Bảng xếp hạng thịnh hành</string>
     <string name="home_section_top_trending">Top thịnh hành</string>
     <string name="home_section_curated_playlists">Playlist tuyển chọn thịnh hành</string>
     <string name="home_curated_desc">Nhạc hay tuyển chọn</string>
@@ -237,7 +239,7 @@
     <string name="language_nl">Nederlands (Netherlands)</string>
     <string name="language_uk">Українська (Ukraine)</string>
     <string name="language_sv">Svenska (Sweden)</string>
-    <string name="home_section_quick_grid">⚡ Nghe nhanh (Quick Grid)</string>
+    <string name="home_section_quick_grid">Nghe nhanh</string>
     <string name="player_tap_to_open_queue_simple">Chạm để mở Danh sách chờ</string>
     <string name="player_volume_standard">100% (Chuẩn)</string>
     <string name="player_volume_max_dsp">300% (Max DSP)</string>

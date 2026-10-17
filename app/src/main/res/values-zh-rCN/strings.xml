@@ -28,10 +28,10 @@
     <string name="home_pull_to_refresh">下拉刷新</string>
     <string name="home_release_to_refresh">释放以刷新</string>
     <string name="home_refreshing">正在刷新主页...</string>
-    <string name="home_section_for_you">✨ 为您推荐（基于播放历史）</string>
-    <string name="home_section_visual_grid">🎨 视觉推荐</string>
-    <string name="home_section_music_only">🎵 纯音乐</string>
-    <string name="home_section_trending">📋 流行榜单</string>
+    <string name="home_section_for_you">为您推荐</string>
+    <string name="home_section_visual_grid">视觉推荐</string>
+    <string name="home_section_music_only">纯音乐</string>
+    <string name="home_section_trending">流行榜单</string>
     <string name="home_section_top_trending">热门排行</string>
     <string name="home_section_curated_playlists">精选歌单</string>
     <string name="home_curated_desc">精选热门单曲</string>
@@ -237,7 +237,7 @@
     <string name="language_nl">Nederlands</string>
     <string name="language_uk">Українська</string>
     <string name="language_sv">Svenska</string>
-    <string name="home_section_quick_grid">⚡ 快速播放</string>
+    <string name="home_section_quick_grid">快速播放</string>
     <string name="player_tap_to_open_queue_simple">点击打开待播清单</string>
     <string name="player_volume_standard">100% (标准)</string>
     <string name="player_volume_max_dsp">300% (最大DSP)</string>

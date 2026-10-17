@@ -13,6 +13,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -119,10 +120,10 @@ class YouTubeStreamResolver(
 
                                     val title = vr.optJSONObject("title")?.optJSONArray("runs")
                                         ?.optJSONObject(0)?.optString("text") ?: ""
-                                    val artist = vr.optJSONObject("longBylineText")?.optJSONArray("runs")
-                                        ?.optJSONObject(0)?.optString("text")
-                                        ?: vr.optJSONObject("shortBylineText")?.optJSONArray("runs")
-                                            ?.optJSONObject(0)?.optString("text") ?: "YouTube Music"
+                                    val artist = extractArtistFromRuns(
+                                        vr.optJSONObject("longBylineText")?.optJSONArray("runs")
+                                            ?: vr.optJSONObject("shortBylineText")?.optJSONArray("runs")
+                                    )
 
                                     val thumbs = vr.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
                                     val rawThumb = thumbs?.optJSONObject(thumbs.length() - 1)?.optString("url")
@@ -404,11 +405,11 @@ class YouTubeStreamResolver(
             ?.optJSONObject("text")?.optJSONArray("runs")
             ?.optJSONObject(0)?.optString("text") ?: return null
 
-        // Extract Artist
+        // Extract Artist (skipping generic types like "Song", "Video", "Bài hát")
         val artistRuns = flexColumns.optJSONObject(1)
             ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
             ?.optJSONObject("text")?.optJSONArray("runs")
-        val artist = artistRuns?.optJSONObject(0)?.optString("text") ?: "YouTube Music"
+        val artist = extractArtistFromRuns(artistRuns)
 
         // Extract VideoId
         val overlayWatch = item.optJSONObject("overlay")
@@ -980,6 +981,60 @@ class YouTubeStreamResolver(
                 put("hl", "vi")
                 put("gl", "VN")
             })
+        }
+    }
+    companion object {
+        private val ARTIST_IGNORED_WORDS = setOf(
+            "bài hát", "bai hat", "video", "music video", "mv",
+            "song", "songs", "track", "tracks",
+            "single", "singles", "album", "albums", "ep",
+            "danh sách phát", "playlist", "danh sach phat",
+            "nghệ sĩ", "nghe si", "artist", "artists", "channel", "kênh",
+            "lượt xem", "views", "subscribers", "người đăng ký"
+        )
+
+        fun extractArtistFromRuns(runs: JSONArray?): String {
+            if (runs == null || runs.length() == 0) return "YouTube Music"
+
+            // 1. Explicit artist browse endpoints (UC... or MUSIC_PAGE_TYPE_ARTIST)
+            val explicitArtists = mutableListOf<String>()
+            for (i in 0 until runs.length()) {
+                val runObj = runs.optJSONObject(i) ?: continue
+                val text = runObj.optString("text").trim()
+                if (text.isEmpty() || text == "•" || text == "·" || text == "-" || text == "|") continue
+
+                val browseEndpoint = runObj.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")
+                val browseId = browseEndpoint?.optString("browseId").orEmpty()
+                val pageType = browseEndpoint
+                    ?.optJSONObject("browseEndpointContextSupportedConfigs")
+                    ?.optJSONObject("browseEndpointContextMusicConfig")
+                    ?.optString("pageType").orEmpty()
+
+                if (browseId.startsWith("UC") || pageType.contains("ARTIST", ignoreCase = true) || pageType.contains("CHANNEL", ignoreCase = true)) {
+                    explicitArtists.add(text)
+                }
+            }
+            if (explicitArtists.isNotEmpty()) {
+                return explicitArtists.joinToString(", ")
+            }
+
+            // 2. Filter out delimiters, type labels, durations, view counts
+            val validRuns = mutableListOf<String>()
+            for (i in 0 until runs.length()) {
+                val runObj = runs.optJSONObject(i) ?: continue
+                val text = runObj.optString("text").trim()
+                if (text.isEmpty()) continue
+                if (text == "•" || text == "·" || text == "-" || text == "|" || text == "/") continue
+
+                val lower = text.lowercase()
+                if (ARTIST_IGNORED_WORDS.contains(lower)) continue
+                if (text.matches(Regex("^\\d+:\\d+(:\\d+)?$"))) continue
+                if (lower.contains("views") || lower.contains("lượt xem") || lower.contains("subscribers") || lower.contains("lượt nghe")) continue
+
+                validRuns.add(text)
+            }
+
+            return validRuns.firstOrNull() ?: "YouTube Music"
         }
     }
 }

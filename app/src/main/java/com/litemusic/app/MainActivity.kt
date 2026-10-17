@@ -459,6 +459,14 @@ class MainActivity : ComponentActivity() {
 }
 
 
+data class HomeSectionsData(
+    val quickPicks: List<Song> = emptyList(),
+    val recommended: List<Song> = emptyList(),
+    val trending: List<Song> = emptyList(),
+    val discovery: List<Song> = emptyList(),
+    val allSectionIds: Set<String> = emptySet()
+)
+
 enum class MoodCategory(val titleRes: Int) {
     ALL(R.string.mood_all),
     RELAX(R.string.mood_relax),
@@ -684,35 +692,108 @@ fun MainAppScreen(
     var selectedMoodFilter by remember { mutableStateOf(MoodCategory.ALL) }
     val moodFilters = remember { MoodCategory.entries }
 
-    val displayedHomeSongs = remember(homeSongs, selectedMoodFilter) {
-        when (selectedMoodFilter) {
-            MoodCategory.RELAX -> homeSongs.filter { s ->
-                val t = (s.title + " " + s.artist).lowercase()
-                t.contains("chill") || t.contains("lofi") || t.contains("thư giãn") || t.contains("acoustic") || t.contains("mưa") || t.contains("ngủ")
-            }.ifEmpty { homeSongs }
-            MoodCategory.ENERGY -> homeSongs.filter { s ->
-                val t = (s.title + " " + s.artist).lowercase()
-                t.contains("remix") || t.contains("edm") || t.contains("sôi động") || t.contains("rap") || t.contains("gym") || t.contains("dance")
-            }.ifEmpty { homeSongs }
-            MoodCategory.FOCUS -> homeSongs.filter { s ->
-                val t = (s.title + " " + s.artist).lowercase()
-                t.contains("lofi") || t.contains("piano") || t.contains("study") || t.contains("không lời") || t.contains("coffee") || t.contains("chill")
-            }.ifEmpty { homeSongs }
-            MoodCategory.ROMANCE -> homeSongs.filter { s ->
-                val t = (s.title + " " + s.artist).lowercase()
-                t.contains("yêu") || t.contains("love") || t.contains("ballad") || t.contains("tình") || t.contains("nhẹ nhàng") || t.contains("em")
-            }.ifEmpty { homeSongs }
-            MoodCategory.PARTY -> homeSongs.filter { s ->
-                val t = (s.title + " " + s.artist).lowercase()
-                t.contains("vinahouse") || t.contains("bass") || t.contains("remix") || t.contains("club") || t.contains("party") || t.contains("dj")
-            }.ifEmpty { homeSongs }
-            else -> homeSongs
+    var moodSongsCache by remember { mutableStateOf<Map<MoodCategory, List<Song>>>(emptyMap()) }
+    var isLoadingMood by remember { mutableStateOf(false) }
+
+    var infiniteDiscoverySongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var isLoadingMoreDiscovery by remember { mutableStateOf(false) }
+    var hasMoreDiscovery by remember { mutableStateOf(true) }
+
+    // Dynamic mood-targeted music fetching
+    LaunchedEffect(selectedMoodFilter, refreshHomeTrigger) {
+        if (selectedMoodFilter != MoodCategory.ALL && !moodSongsCache.containsKey(selectedMoodFilter)) {
+            isLoadingMood = true
+            val query = when (selectedMoodFilter) {
+                MoodCategory.RELAX -> "Chill acoustic thư giãn acoustic"
+                MoodCategory.ENERGY -> "High energy edm remix sôi động"
+                MoodCategory.FOCUS -> "Lofi beats study work tập trung"
+                MoodCategory.ROMANCE -> "Nhạc tình yêu ballad lãng mạn"
+                MoodCategory.PARTY -> "Party edm club remix vinahouse"
+                else -> "Top Music Trending"
+            }
+            try {
+                val res = onSearch(query, AudioSource.YOUTUBE_MUSIC)
+                val filtered = libraryManager.filterBlocked(res)
+                if (filtered.isNotEmpty()) {
+                    moodSongsCache = moodSongsCache + (selectedMoodFilter to filtered)
+                }
+            } catch (_: Exception) {}
+            isLoadingMood = false
+        }
+    }
+
+    val currentMoodPool = remember(selectedMoodFilter, homeSongs, moodSongsCache) {
+        if (selectedMoodFilter == MoodCategory.ALL) {
+            homeSongs
+        } else {
+            moodSongsCache[selectedMoodFilter] ?: homeSongs
+        }
+    }
+
+    // Deduplicated sections data across Quick Picks, Recommended, Trending, and Discovery
+    val homeSections = remember(currentMoodPool, personalizedSongs) {
+        val seen = mutableSetOf<String>()
+
+        val qp = currentMoodPool.take(4).also { list -> list.forEach { seen.add(it.id) } }
+        val recCandidates = personalizedSongs.filterNot { it.id in seen } + currentMoodPool.filterNot { it.id in seen }
+        val rec = recCandidates.take(8).also { list -> list.forEach { seen.add(it.id) } }
+        val tr = currentMoodPool.filterNot { it.id in seen }.take(10).also { list -> list.forEach { seen.add(it.id) } }
+        val disc = currentMoodPool.filterNot { it.id in seen }.also { list -> list.forEach { seen.add(it.id) } }
+
+        HomeSectionsData(
+            quickPicks = qp,
+            recommended = rec,
+            trending = tr,
+            discovery = disc,
+            allSectionIds = seen
+        )
+    }
+
+    // Infinite scroll detection: triggers when user scrolls near the bottom
+    val shouldLoadMoreDiscovery = remember {
+        derivedStateOf {
+            val layoutInfo = homeLazyListState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            totalItems > 0 && lastVisibleIndex >= totalItems - 4
+        }
+    }
+
+    LaunchedEffect(shouldLoadMoreDiscovery.value) {
+        if (shouldLoadMoreDiscovery.value && !isLoadingMoreDiscovery && !isLoadingHome && hasMoreDiscovery && homeSections.allSectionIds.isNotEmpty()) {
+            isLoadingMoreDiscovery = true
+            try {
+                val seedSong = (homeSections.discovery + infiniteDiscoverySongs + homeSections.trending).shuffled().firstOrNull()
+                val candidateSongs = if (seedSong != null) {
+                    val related = onGetRelatedSongs?.invoke(seedSong) ?: emptyList()
+                    related.ifEmpty {
+                        onSearch("${seedSong.artist} hit songs", AudioSource.YOUTUBE_MUSIC)
+                    }
+                } else {
+                    onSearch("Trending Music Explore", AudioSource.YOUTUBE_MUSIC)
+                }
+                val filtered = libraryManager.filterBlocked(candidateSongs)
+                val allKnownIds = homeSections.allSectionIds + infiniteDiscoverySongs.map { it.id }.toSet()
+                val uniqueNew = filtered.filterNot { it.id in allKnownIds }
+                if (uniqueNew.isEmpty()) {
+                    hasMoreDiscovery = false
+                } else {
+                    infiniteDiscoverySongs = infiniteDiscoverySongs + uniqueNew
+                }
+            } catch (_: Exception) {
+                hasMoreDiscovery = false
+            }
+            isLoadingMoreDiscovery = false
         }
     }
 
     // Fetch initial live trending music & generate personalized recommendations
     LaunchedEffect(refreshHomeTrigger) {
         isLoadingHome = true
+        moodSongsCache = emptyMap()
+        infiniteDiscoverySongs = emptyList()
+        hasMoreDiscovery = true
+
         val trending = onSearch("Top Music Trending", AudioSource.YOUTUBE_MUSIC)
         homeSongs = libraryManager.filterBlocked(trending)
         if (homeSongs.isNotEmpty()) {
@@ -927,40 +1008,70 @@ fun MainAppScreen(
 
                                 // Top Bar
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
                                         Box(
                                             modifier = Modifier
                                                 .size(32.dp)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .background(MaterialTheme.colorScheme.primaryContainer),
+                                                .clip(CircleShape)
+                                                .background(
+                                                    Brush.linearGradient(
+                                                        listOf(
+                                                            MaterialTheme.colorScheme.primary,
+                                                            MaterialTheme.colorScheme.tertiary
+                                                        )
+                                                    )
+                                                ),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Text("♫", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                            Icon(
+                                                Icons.Default.GraphicEq,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onPrimary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
                                         }
-                                        Text(
-                                            text = "LiteMusic",
-                                            fontSize = 22.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "LiteMusic",
+                                                fontSize = 22.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                letterSpacing = (-0.5).sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .padding(start = 3.dp, top = 6.dp)
+                                                    .size(6.dp)
+                                                    .clip(CircleShape)
+                                                    .background(MaterialTheme.colorScheme.primary)
+                                            )
+                                        }
                                     }
 
                                     IconButton(
-                                        onClick = { showHomeSearchDialog = true },
+                                        onClick = {
+                                            refreshHomeTrigger++
+                                            Toast.makeText(context, context.getString(R.string.toast_home_refreshing), Toast.LENGTH_SHORT).show()
+                                        },
                                         modifier = Modifier
-                                            .size(38.dp)
+                                            .size(36.dp)
                                             .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f))
                                     ) {
                                         Icon(
-                                            Icons.Default.Search,
-                                            contentDescription = stringResource(R.string.quick_search),
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
+                                            Icons.Default.Refresh,
+                                            contentDescription = stringResource(R.string.home_pull_to_refresh),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(19.dp)
                                         )
                                     }
                                 }
@@ -1028,15 +1139,15 @@ fun MainAppScreen(
                                                     val isSelected = selectedMoodFilter == mood
                                                     Surface(
                                                         shape = RoundedCornerShape(20.dp),
-                                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                        border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
+                                                        border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
                                                         modifier = Modifier.clickable { selectedMoodFilter = mood }
                                                     ) {
                                                         Text(
                                                             text = stringResource(mood.titleRes),
                                                             fontSize = 12.sp,
                                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                                                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                                                         )
                                                     }
@@ -1044,19 +1155,55 @@ fun MainAppScreen(
                                             }
                                         }
 
-                                        // Section 1: Personalized Recommendations (From >20s History)
-                                        if (personalizedSongs.isNotEmpty()) {
+                                        // Section 1: Quick Picks Grid
+                                        if (homeSections.quickPicks.isNotEmpty()) {
                                             item {
                                                 Text(
-                                                    text = stringResource(R.string.home_section_for_you),
+                                                    text = stringResource(R.string.home_section_quick_grid),
                                                     fontWeight = FontWeight.Bold,
-                                                    fontSize = 15.sp,
+                                                    fontSize = 16.5.sp,
                                                     color = MaterialTheme.colorScheme.onSurface
                                                 )
                                                 Spacer(modifier = Modifier.height(8.dp))
 
-                                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                                    items(personalizedSongs) { song ->
+                                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    homeSections.quickPicks.chunked(2).forEach { pair ->
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                        ) {
+                                                            pair.forEach { song ->
+                                                                val isSongActive = activeSong?.id == song.id
+                                                                Box(modifier = Modifier.weight(1f)) {
+                                                                    QuickPickTile(
+                                                                        song = song,
+                                                                        onClick = { playTrack(song) },
+                                                                        isActive = isSongActive,
+                                                                        isLoading = isSongActive && isAudioLoading
+                                                                    )
+                                                                }
+                                                            }
+                                                            if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Section 2: Recommended for You (Visual Carousel)
+                                        if (homeSections.recommended.isNotEmpty()) {
+                                            item {
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    text = stringResource(R.string.home_section_for_you),
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 16.5.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Spacer(modifier = Modifier.height(8.dp))
+
+                                                LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                                    items(homeSections.recommended, key = { it.id }) { song ->
                                                         val isSongActive = activeSong?.id == song.id
                                                         AlbumGridCard(
                                                             song = song,
@@ -1069,98 +1216,123 @@ fun MainAppScreen(
                                             }
                                         }
 
-                                        // Section 2: Quick Picks Grid
-                                        item {
-                                            Text(
-                                                text = stringResource(R.string.home_section_quick_grid),
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 15.sp,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Spacer(modifier = Modifier.height(8.dp))
+                                        // Section 3: Trending Chart (Ranked List)
+                                        if (homeSections.trending.isNotEmpty()) {
+                                            item {
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    text = stringResource(R.string.home_section_trending),
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 16.5.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                            }
 
-                                            val quickList = displayedHomeSongs.take(4)
-                                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                quickList.chunked(2).forEach { pair ->
-                                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                        pair.forEach { song ->
-                                                            val isSongActive = activeSong?.id == song.id
-                                                            Box(modifier = Modifier.weight(1f)) {
-                                                                QuickPickTile(
-                                                                    song = song,
-                                                                    onClick = { playTrack(song) },
-                                                                    isActive = isSongActive,
-                                                                    isLoading = isSongActive && isAudioLoading
-                                                                )
-                                                            }
-                                                        }
-                                                        if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
+                                            itemsIndexed(homeSections.trending, key = { _, s -> s.id }) { index, song ->
+                                                val isSongActive = activeSong?.id == song.id
+                                                SongListCard(
+                                                    song = song,
+                                                    rank = index + 1,
+                                                    onClick = { playTrack(song) },
+                                                    isActive = isSongActive,
+                                                    isLoading = isSongActive && isAudioLoading,
+                                                    isFavorite = libraryManager.isFavorite(song.id),
+                                                    onToggleFavorite = {
+                                                        val isFav = libraryManager.toggleFavorite(song)
+                                                        Toast.makeText(context, if (isFav) context.getString(R.string.toast_added_to_favorites) else context.getString(R.string.toast_removed_from_favorites), Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    onAddToQueue = {
+                                                        playbackQueueManager.addToManualQueue(song)
+                                                        Toast.makeText(context, context.getString(R.string.toast_added_to_queue, song.title), Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    onBlockSong = {
+                                                        libraryManager.blockSong(song)
+                                                        homeSongs = libraryManager.filterBlocked(homeSongs)
+                                                        Toast.makeText(context, context.getString(R.string.toast_blocked_song, song.title), Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    onBlockArtist = {
+                                                        libraryManager.blockArtist(song.artist)
+                                                        homeSongs = libraryManager.filterBlocked(homeSongs)
+                                                        Toast.makeText(context, context.getString(R.string.toast_blocked_artist, song.artist), Toast.LENGTH_SHORT).show()
+                                                    }
+                                                )
+                                            }
+                                        }
+
+                                        // Section 4: Infinite Discovery Feed
+                                        val combinedDiscovery = remember(homeSections.discovery, infiniteDiscoverySongs, homeSections.allSectionIds) {
+                                            homeSections.discovery + infiniteDiscoverySongs.filterNot { it.id in homeSections.allSectionIds }
+                                        }
+                                        if (combinedDiscovery.isNotEmpty()) {
+                                            item {
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text(
+                                                    text = stringResource(R.string.home_section_infinite_feed),
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 16.5.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                            }
+
+                                            items(combinedDiscovery, key = { "disc_${it.id}" }) { song ->
+                                                val isSongActive = activeSong?.id == song.id
+                                                SongListCard(
+                                                    song = song,
+                                                    rank = null,
+                                                    onClick = { playTrack(song) },
+                                                    isActive = isSongActive,
+                                                    isLoading = isSongActive && isAudioLoading,
+                                                    isFavorite = libraryManager.isFavorite(song.id),
+                                                    onToggleFavorite = {
+                                                        val isFav = libraryManager.toggleFavorite(song)
+                                                        Toast.makeText(context, if (isFav) context.getString(R.string.toast_added_to_favorites) else context.getString(R.string.toast_removed_from_favorites), Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    onAddToQueue = {
+                                                        playbackQueueManager.addToManualQueue(song)
+                                                        Toast.makeText(context, context.getString(R.string.toast_added_to_queue, song.title), Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    onBlockSong = {
+                                                        libraryManager.blockSong(song)
+                                                        homeSongs = libraryManager.filterBlocked(homeSongs)
+                                                        Toast.makeText(context, context.getString(R.string.toast_blocked_song, song.title), Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    onBlockArtist = {
+                                                        libraryManager.blockArtist(song.artist)
+                                                        homeSongs = libraryManager.filterBlocked(homeSongs)
+                                                        Toast.makeText(context, context.getString(R.string.toast_blocked_artist, song.artist), Toast.LENGTH_SHORT).show()
+                                                    }
+                                                )
+                                            }
+                                        }
+
+                                        if (isLoadingMoreDiscovery) {
+                                            item {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(vertical = 16.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                    ) {
+                                                        CircularProgressIndicator(
+                                                            modifier = Modifier.size(18.dp),
+                                                            strokeWidth = 2.dp,
+                                                            color = MaterialTheme.colorScheme.primary
+                                                        )
+                                                        Text(
+                                                            text = stringResource(R.string.home_section_loading_more),
+                                                            fontSize = 12.sp,
+                                                            color = MaterialTheme.colorScheme.outline
+                                                        )
                                                     }
                                                 }
                                             }
                                         }
-
-                                        // Section 3: Visual Album Grid (Horizontal Carousel)
-                                        item {
-                                            Text(
-                                                text = stringResource(R.string.home_section_visual_grid),
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 15.sp,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Spacer(modifier = Modifier.height(8.dp))
-
-                                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                                items(displayedHomeSongs.drop(4).take(8)) { song ->
-                                                    val isSongActive = activeSong?.id == song.id
-                                                    AlbumGridCard(
-                                                        song = song,
-                                                        onClick = { playTrack(song) },
-                                                        isActive = isSongActive,
-                                                        isLoading = isSongActive && isAudioLoading
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        // Section 4: Detailed Track List
-                                        item {
-                                            Text(
-                                                text = stringResource(R.string.home_section_trending),
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 15.sp,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
-
-                                        items(displayedHomeSongs.drop(12)) { song ->
-                                        val isSongActive = activeSong?.id == song.id
-                                        SongListCard(
-                                            song = song,
-                                            onClick = { playTrack(song) },
-                                            isActive = isSongActive,
-                                            isLoading = isSongActive && isAudioLoading,
-                                            isFavorite = libraryManager.isFavorite(song.id),
-                                            onToggleFavorite = {
-                                                val isFav = libraryManager.toggleFavorite(song)
-                                                Toast.makeText(context, if (isFav) context.getString(R.string.toast_added_to_favorites) else context.getString(R.string.toast_removed_from_favorites), Toast.LENGTH_SHORT).show()
-                                            },
-                                            onAddToQueue = {
-                                                playbackQueueManager.addToManualQueue(song)
-                                                Toast.makeText(context, context.getString(R.string.toast_added_to_queue, song.title), Toast.LENGTH_SHORT).show()
-                                            },
-                                            onBlockSong = {
-                                                libraryManager.blockSong(song)
-                                                homeSongs = libraryManager.filterBlocked(homeSongs)
-                                                Toast.makeText(context, context.getString(R.string.toast_blocked_song, song.title), Toast.LENGTH_SHORT).show()
-                                            },
-                                            onBlockArtist = {
-                                                libraryManager.blockArtist(song.artist)
-                                                homeSongs = libraryManager.filterBlocked(homeSongs)
-                                                Toast.makeText(context, context.getString(R.string.toast_blocked_artist, song.artist), Toast.LENGTH_SHORT).show()
-                                            }
-                                        )
-                                    }
                                 }
                             }
                         }
@@ -1592,18 +1764,22 @@ fun QuickPickTile(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .height(54.dp)
+            .clip(RoundedCornerShape(10.dp))
             .clickable { onClick() },
-        color = if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f) else if (isGlass) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow,
-        border = if (isActive) BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)) else if (isGlass) BorderStroke(1.dp, GlassBorderDark) else CardDefaults.outlinedCardBorder()
+        color = if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
+                else if (isGlass) MaterialTheme.colorScheme.surface
+                else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+        border = if (isActive) BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                 else if (isGlass) BorderStroke(1.dp, GlassBorderDark)
+                 else null
     ) {
         Row(
-            modifier = Modifier.padding(6.dp).fillMaxWidth(),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)),
+                modifier = Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 val effectiveArt = getEffectiveArtworkUrl(song.thumbnailUrl, song.sourceId, song.id)
@@ -1619,20 +1795,29 @@ fun QuickPickTile(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
-                if (isActive && isLoading) {
+                if (isActive) {
                     Box(
-                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)),
+                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.GraphicEq,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = song.title,
@@ -1644,8 +1829,8 @@ fun QuickPickTile(
                 )
                 Text(
                     text = if (isActive && isLoading) stringResource(R.string.player_loading_stream) else song.artist,
-                    fontSize = 10.5.sp,
-                    color = if (isActive && isLoading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    fontSize = 11.sp,
+                    color = if (isActive && isLoading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1662,81 +1847,83 @@ fun AlbumGridCard(
     isLoading: Boolean = false
 ) {
     val isGlass = LocalThemeStyle.current == AppThemeStyle.LIQUID_GLASS
-    Card(
+    Column(
         modifier = Modifier
-            .width(132.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f) else if (isGlass) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        border = if (isActive) BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)) else if (isGlass) BorderStroke(1.dp, GlassBorderDark) else CardDefaults.outlinedCardBorder(),
-        shape = RoundedCornerShape(16.dp)
+            .width(136.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .padding(bottom = 4.dp)
     ) {
-        Column(modifier = Modifier.padding(8.dp)) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                contentAlignment = Alignment.Center
-            ) {
-                val effectiveArt = getEffectiveArtworkUrl(song.thumbnailUrl, song.sourceId, song.id)
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(effectiveArt.ifEmpty { R.drawable.ic_music_note })
-                        .crossfade(true)
-                        .placeholder(R.drawable.ic_music_note)
-                        .error(R.drawable.ic_music_note)
-                        .fallback(R.drawable.ic_music_note)
-                        .build(),
-                    contentDescription = song.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                .then(
+                    if (isActive) Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
+                    else if (isGlass) Modifier.border(1.dp, GlassBorderDark, RoundedCornerShape(12.dp))
+                    else Modifier
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            val effectiveArt = getEffectiveArtworkUrl(song.thumbnailUrl, song.sourceId, song.id)
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(effectiveArt.ifEmpty { R.drawable.ic_music_note })
+                    .crossfade(true)
+                    .placeholder(R.drawable.ic_music_note)
+                    .error(R.drawable.ic_music_note)
+                    .fallback(R.drawable.ic_music_note)
+                    .build(),
+                contentDescription = song.title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+
+            if (isActive) {
                 Box(
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(6.dp)
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.45f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (isActive && isLoading) {
+                    if (isLoading) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.5.dp,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     } else {
                         Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Play",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(16.dp)
+                            imageVector = Icons.Default.GraphicEq,
+                            contentDescription = "Playing",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = song.title,
-                fontWeight = if (isActive) FontWeight.Bold else FontWeight.SemiBold,
-                fontSize = 12.sp,
-                color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = if (isActive && isLoading) stringResource(R.string.player_loading_stream) else song.artist,
-                fontSize = 10.5.sp,
-                color = if (isActive && isLoading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = song.title,
+            fontWeight = if (isActive) FontWeight.Bold else FontWeight.SemiBold,
+            fontSize = 12.5.sp,
+            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            minLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            lineHeight = 16.sp
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = if (isActive && isLoading) stringResource(R.string.player_loading_stream) else song.artist,
+            fontSize = 11.sp,
+            color = if (isActive && isLoading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -1750,7 +1937,8 @@ fun SongListCard(
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
     onBlockSong: (() -> Unit)? = null,
-    onBlockArtist: (() -> Unit)? = null
+    onBlockArtist: (() -> Unit)? = null,
+    rank: Int? = null
 ) {
     val isGlass = LocalThemeStyle.current == AppThemeStyle.LIQUID_GLASS
     var showMenu by remember { mutableStateOf(false) }
@@ -1758,7 +1946,7 @@ fun SongListCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(12.dp))
             .clickable { onClick() },
         colors = CardDefaults.cardColors(
             containerColor = if (isActive) {
@@ -1766,7 +1954,7 @@ fun SongListCard(
             } else if (isGlass) {
                 MaterialTheme.colorScheme.surface
             } else {
-                MaterialTheme.colorScheme.surfaceContainerLow
+                MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.45f)
             }
         ),
         border = if (isActive) {
@@ -1774,16 +1962,28 @@ fun SongListCard(
         } else if (isGlass) {
             BorderStroke(1.dp, GlassBorderDark)
         } else {
-            CardDefaults.outlinedCardBorder()
+            null
         },
-        shape = RoundedCornerShape(14.dp)
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
-            modifier = Modifier.padding(10.dp).fillMaxWidth(),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (rank != null) {
+                Text(
+                    text = if (rank < 10) "0$rank" else "$rank",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.5.sp,
+                    color = if (rank <= 3) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.width(28.dp),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+
             Box(
-                modifier = Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)),
+                modifier = Modifier.size(46.dp).clip(RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 val effectiveArt = getEffectiveArtworkUrl(song.thumbnailUrl, song.sourceId, song.id)
@@ -1800,17 +2000,25 @@ fun SongListCard(
                     contentScale = ContentScale.Crop
                 )
 
-                // Loading animation spinner when active song is resolving / buffering
-                if (isActive && isLoading) {
+                if (isActive) {
                     Box(
-                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)),
+                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.2.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.GraphicEq,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -1826,67 +2034,25 @@ fun SongListCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = song.source.name.replace("_", " "),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text("•", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
-                    if (isActive && isLoading) {
-                        Text(
-                            text = stringResource(R.string.player_loading_stream),
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1
-                        )
-                    } else {
-                        Text(
-                            text = song.artist,
-                            fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.outline,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (isActive && isLoading) stringResource(R.string.player_loading_stream) else song.artist,
+                    fontSize = 11.5.sp,
+                    color = if (isActive && isLoading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
 
-            // Options & Quick actions
+            // Options & Quick actions in dropdown menu
             Box {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (onToggleFavorite != null) {
-                        IconButton(onClick = onToggleFavorite, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                contentDescription = "Favorite",
-                                tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                    if (onAddToQueue != null) {
-                        IconButton(onClick = onAddToQueue, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.PlaylistAdd,
-                                contentDescription = stringResource(R.string.action_add_to_queue),
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                    if (onBlockSong != null || onBlockArtist != null) {
-                        IconButton(onClick = { showMenu = true }, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = stringResource(R.string.action_options),
-                                tint = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
+                IconButton(onClick = { showMenu = true }, modifier = Modifier.size(34.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = stringResource(R.string.action_options),
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(19.dp)
+                    )
                 }
 
                 DropdownMenu(
@@ -1938,7 +2104,6 @@ fun SongListCard(
         }
     }
 }
-
 @Composable
 fun M3MiniPlayer(
     title: String,

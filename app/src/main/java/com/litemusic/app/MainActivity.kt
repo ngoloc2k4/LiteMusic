@@ -21,6 +21,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1123,6 +1124,9 @@ fun MainAppScreen(
                                         }
                                     }
                                 } else {
+                                    val combinedDiscovery = remember(homeSections.discovery, infiniteDiscoverySongs, homeSections.allSectionIds) {
+                                        homeSections.discovery + infiniteDiscoverySongs.filterNot { it.id in homeSections.allSectionIds }
+                                    }
                                     LazyColumn(
                                         state = homeLazyListState,
                                         modifier = Modifier.fillMaxSize(),
@@ -1261,9 +1265,6 @@ fun MainAppScreen(
                                         }
 
                                         // Section 4: Infinite Discovery Feed
-                                        val combinedDiscovery = remember(homeSections.discovery, infiniteDiscoverySongs, homeSections.allSectionIds) {
-                                            homeSections.discovery + infiniteDiscoverySongs.filterNot { it.id in homeSections.allSectionIds }
-                                        }
                                         if (combinedDiscovery.isNotEmpty()) {
                                             item {
                                                 Spacer(modifier = Modifier.height(8.dp))

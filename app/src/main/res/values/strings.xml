@@ -294,4 +294,33 @@
     <string name="manage_cache">Storage &amp; Cache</string>
     <string name="home_play_all">Play All</string>
     <string name="source_all">All</string>
+
+    <!-- Enhanced Queue Playlist -->
+    <string name="queue_header_title">Playback Queue</string>
+    <string name="queue_header_subtitle">%1$d tracks up next • %2$s</string>
+    <string name="queue_now_playing_badge">NOW PLAYING</string>
+    <string name="queue_up_next_manual">NEXT FROM YOU</string>
+    <string name="queue_up_next_empty">No tracks in your queue</string>
+    <string name="queue_up_next_empty_hint">Tap (+) or \'Play Next\' on any track to add it here</string>
+    <string name="queue_auto_suggestions">AUTO RECOMMENDATIONS</string>
+    <string name="queue_auto_desc">Recommended based on current track</string>
+    <string name="queue_auto_toggle">Autoplay</string>
+    <string name="queue_refresh_suggestions">Refresh</string>
+    <string name="queue_play_now">Play Now</string>
+    <string name="queue_play_next">Play Next</string>
+    <string name="queue_move_up">Move Up</string>
+    <string name="queue_move_down">Move Down</string>
+    <string name="queue_save_playlist">Save as Playlist</string>
+    <string name="queue_clear_manual">Clear Your Queue</string>
+    <string name="queue_clear_all">Clear Entire Queue</string>
+    <string name="queue_undo">Undo</string>
+    <string name="queue_removed_msg">Removed \"%1$s\" from queue</string>
+    <string name="queue_source_manual">Manual</string>
+    <string name="queue_source_radio">Radio</string>
+    <string name="queue_source_ai">AI Mix</string>
+    <string name="queue_source_playlist">Playlist</string>
+    <string name="queue_save_playlist_title">Name your playlist</string>
+    <string name="queue_save_playlist_success">Saved queue as playlist: %1$s</string>
+    <string name="queue_promoted_msg">Added \"%1$s\" to your queue</string>
+    <string name="queue_sheet_title">Queue</string>
 </resources>

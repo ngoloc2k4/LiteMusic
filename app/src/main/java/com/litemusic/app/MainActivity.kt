@@ -108,6 +108,8 @@ import com.litemusic.app.R
 import com.litemusic.app.core.i18n.LocaleHelper
 import com.litemusic.app.core.debug.DebugLogServer
 import java.io.File
+import com.litemusic.app.core.network.EndpointHealthManager
+import com.litemusic.app.core.network.AnonymousSessionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -116,6 +118,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 class MainActivity : ComponentActivity() {
 
@@ -141,6 +144,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         initMediaController()
+
+        // Background multi-endpoint latency measurement & anonymous session refresh
+        EndpointHealthManager.getInstance().startBackgroundPinger(lifecycleScope)
+        AnonymousSessionManager.getInstance().ensureVisitorDataAsync(lifecycleScope)
 
         if (ThemePreferences.isDebugMode(this)) {
             DebugLogServer.start(lifecycleScope)
@@ -253,10 +260,10 @@ class MainActivity : ComponentActivity() {
         if (q.isBlank()) return@withContext emptyList()
 
         coroutineScope {
-            val ytMusicDeferred = async { runCatching { ytResolver.search(q) }.getOrDefault(emptyList()) }
-            val ytVideoDeferred = async { runCatching { ytResolver.searchRegularVideos(q) }.getOrDefault(emptyList()) }
-            val scDeferred = async { runCatching { scResolver.search(q) }.getOrDefault(emptyList()) }
-            val spotifyDeferred = async { runCatching { spotifyBridge.fetchPlaylistTracks(q) }.getOrDefault(emptyList()) }
+            val ytMusicDeferred = async { withTimeoutOrNull(2500L) { runCatching { ytResolver.search(q) }.getOrNull() } ?: emptyList() }
+            val ytVideoDeferred = async { withTimeoutOrNull(2500L) { runCatching { ytResolver.searchRegularVideos(q) }.getOrNull() } ?: emptyList() }
+            val scDeferred = async { withTimeoutOrNull(2500L) { runCatching { scResolver.search(q) }.getOrNull() } ?: emptyList() }
+            val spotifyDeferred = async { withTimeoutOrNull(2500L) { runCatching { spotifyBridge.fetchPlaylistTracks(q) }.getOrNull() } ?: emptyList() }
 
             val results = awaitAll(ytMusicDeferred, ytVideoDeferred, scDeferred, spotifyDeferred)
             val ytMusic = results[0]

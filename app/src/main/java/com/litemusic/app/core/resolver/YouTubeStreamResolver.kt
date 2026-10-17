@@ -1,10 +1,14 @@
 package com.litemusic.app.core.resolver
 
 import android.util.Log
+import com.litemusic.app.core.cache.StreamUrlCache
 import com.litemusic.app.core.model.AudioSource
 import com.litemusic.app.core.model.Song
+import com.litemusic.app.core.network.AnonymousSessionManager
+import com.litemusic.app.core.network.EndpointHealthManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.ConnectionPool
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -14,8 +18,9 @@ import java.util.concurrent.TimeUnit
 
 class YouTubeStreamResolver(
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(4, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .connectionPool(ConnectionPool(16, 5, TimeUnit.MINUTES))
         .build()
 ) : StreamResolver {
 
@@ -214,15 +219,12 @@ class YouTubeStreamResolver(
                     }
                 }
             }
-            // Ensure 50+ results by supplementing with regular YouTube search if needed
-            if (results.size < 50) {
+            // Fallback to regular YouTube search only if Music search returned no results
+            if (results.isEmpty()) {
                 try {
                     val additional = searchRegularVideos(query)
                     for (song in additional) {
-                        if (results.none { it.sourceId == song.sourceId }) {
-                            results.add(song.copy(source = AudioSource.YOUTUBE_MUSIC))
-                            if (results.size >= 55) break
-                        }
+                        results.add(song.copy(source = AudioSource.YOUTUBE_MUSIC))
                     }
                 } catch (_: Exception) {}
             }
@@ -318,17 +320,11 @@ class YouTubeStreamResolver(
                 }
             }
 
-            // If less than 40, fetch additional results via Invidious search
-            if (results.size < 40) {
+            // Only query Invidious if YouTube search returned 0 results
+            if (results.isEmpty()) {
                 try {
                     val invidiousResults = searchViaInvidious(query)
-                    for (song in invidiousResults) {
-                        val cleanId = song.sourceId.removePrefix("ytv_").trim()
-                        if (results.none { it.sourceId.removePrefix("ytv_").trim() == cleanId }) {
-                            results.add(song)
-                            if (results.size >= 50) break
-                        }
-                    }
+                    results.addAll(invidiousResults)
                 } catch (_: Exception) {}
             }
         } catch (e: Exception) {
@@ -353,13 +349,14 @@ class YouTubeStreamResolver(
     }
 
     private fun searchViaInvidious(query: String): List<Song> {
-        val instances = listOf("https://invidious.f5.si", "https://inv.vern.cc")
+        val instances = EndpointHealthManager.getInstance().getRankedInvidiousInstances().take(2)
         for (instance in instances) {
+            val start = System.currentTimeMillis()
             try {
                 val encoded = java.net.URLEncoder.encode(query, "UTF-8")
                 val request = Request.Builder()
                     .url("$instance/api/v1/search?q=$encoded&type=video")
-                    .header("User-Agent", "Mozilla/5.0")
+                    .header("User-Agent", AnonymousSessionManager.UA_DESKTOP_CHROME)
                     .build()
                 val response = client.newCall(request).execute()
                 val body = response.body?.string() ?: continue
@@ -387,8 +384,13 @@ class YouTubeStreamResolver(
                         )
                     )
                 }
-                if (list.isNotEmpty()) return list
-            } catch (_: Exception) {}
+                if (list.isNotEmpty()) {
+                    EndpointHealthManager.getInstance().recordSuccess(instance, System.currentTimeMillis() - start)
+                    return list
+                }
+            } catch (e: Exception) {
+                EndpointHealthManager.getInstance().recordFailure(instance)
+            }
         }
         return emptyList()
     }
@@ -440,127 +442,124 @@ class YouTubeStreamResolver(
         )
     }
 
-    private var cachedVisitorData: String? = null
-
-    @Synchronized
-    private fun getOrFetchVisitorData(forceRefresh: Boolean = false): String? {
-        if (!forceRefresh && !cachedVisitorData.isNullOrEmpty()) {
-            return cachedVisitorData
-        }
-        try {
-            val payload = JSONObject().apply {
-                put("context", getVisionOsContext(null))
-            }
-            val request = Request.Builder()
-                .url(visitorIdUrl)
-                .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15")
-                .header("Content-Type", "application/json")
-                .post(payload.toString().toRequestBody(jsonMediaType))
-                .build()
-            val response = client.newCall(request).execute()
-            val body = response.body?.string()
-            if (!body.isNullOrEmpty()) {
-                val json = JSONObject(body)
-                val vis = json.optJSONObject("responseContext")?.optString("visitorData")
-                if (!vis.isNullOrEmpty()) {
-                    cachedVisitorData = vis
-                    return vis
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(tag, "Failed to fetch visitorData via visitor_id endpoint", e)
-        }
-        return cachedVisitorData
+    private suspend fun getOrFetchVisitorData(forceRefresh: Boolean = false): String? {
+        return AnonymousSessionManager.getInstance().getOrFetchVisitorData(force = forceRefresh)
     }
 
     override suspend fun resolveStreamUrl(song: Song): String? = withContext(Dispatchers.IO) {
         val videoId = song.sourceId.removePrefix("ytv_").trim()
+
+        // 0. Check ultra-fast in-memory LRU cache (0ms instant playback for repeated/cached tracks)
+        val cached = StreamUrlCache.get(videoId)
+        if (!cached?.streamUrl.isNullOrEmpty()) {
+            Log.d(tag, "StreamUrlCache HIT for $videoId")
+            return@withContext cached!!.streamUrl
+        }
         
-        // 1. Try VISIONOS InnerTube client with fresh visitorData
+        // 1. Try VISIONOS InnerTube client with fresh visitorData & ranked endpoints
         val visionUrl = resolveViaVisionOs(videoId)
-        if (visionUrl != null) return@withContext visionUrl
+        if (visionUrl != null) {
+            StreamUrlCache.put(videoId, streamUrl = visionUrl)
+            return@withContext visionUrl
+        }
 
-        // 2. Try Piped API fallback
+        // 2. Try dynamically ranked Piped API fallback
         val pipedUrl = resolveViaPiped(videoId)
-        if (pipedUrl != null) return@withContext pipedUrl
+        if (pipedUrl != null) {
+            StreamUrlCache.put(videoId, streamUrl = pipedUrl)
+            return@withContext pipedUrl
+        }
 
-        // 3. Fallback to Invidious API
+        // 3. Fallback to dynamically ranked Invidious API
         val invidiousUrl = resolveViaInvidious(videoId)
-        if (invidiousUrl != null) return@withContext invidiousUrl
+        if (invidiousUrl != null) {
+            StreamUrlCache.put(videoId, streamUrl = invidiousUrl)
+            return@withContext invidiousUrl
+        }
 
         Log.e(tag, "All stream resolution attempts failed for ${song.title} ($videoId)")
         null
     }
 
-    private fun resolveViaVisionOs(videoId: String): String? {
+    private suspend fun resolveViaVisionOs(videoId: String): String? {
         val cleanId = videoId.removePrefix("ytv_").trim()
-        var visitorData = getOrFetchVisitorData(forceRefresh = false)
-        for (attempt in 0..1) {
-            try {
-                val payload = JSONObject().apply {
-                    put("context", getVisionOsContext(visitorData))
-                    put("videoId", cleanId)
-                    put("contentCheckOk", true)
-                    put("racyCheckOk", true)
-                    put("playbackContext", JSONObject().apply {
-                        put("contentPlaybackContext", JSONObject().apply {
-                            put("html5Preference", "HTML5_PREF_WANTS")
+        val sessionMgr = AnonymousSessionManager.getInstance()
+        val healthMgr = EndpointHealthManager.getInstance()
+        var visitorData = sessionMgr.getOrFetchVisitorData(force = false)
+        val endpoints = healthMgr.getRankedInnerTubeEndpoints()
+
+        for (endpoint in endpoints) {
+            for (attempt in 0..1) {
+                val start = System.currentTimeMillis()
+                try {
+                    val payload = JSONObject().apply {
+                        put("context", sessionMgr.getVisionOsContext(visitorData))
+                        put("videoId", cleanId)
+                        put("contentCheckOk", true)
+                        put("racyCheckOk", true)
+                        put("playbackContext", JSONObject().apply {
+                            put("contentPlaybackContext", JSONObject().apply {
+                                put("html5Preference", "HTML5_PREF_WANTS")
+                            })
                         })
-                    })
-                }
-
-                val reqBuilder = Request.Builder()
-                    .url("$playerGapisUrl?prettyPrint=false&id=$cleanId")
-                    .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15")
-                    .header("Content-Type", "application/json")
-                    .header("X-Goog-Api-Format-Version", "2")
-                    .header("X-Youtube-Client-Name", "101")
-                    .header("X-Youtube-Client-Version", "1.02")
-                    .header("Origin", "https://www.youtube.com")
-                    .post(payload.toString().toRequestBody(jsonMediaType))
-
-                if (!visitorData.isNullOrEmpty()) {
-                    reqBuilder.header("X-Goog-Visitor-Id", visitorData)
-                }
-
-                val response = client.newCall(reqBuilder.build()).execute()
-                val body = response.body?.string() ?: continue
-                val json = JSONObject(body)
-
-                val playability = json.optJSONObject("playabilityStatus")
-                val status = playability?.optString("status")
-                if (status != "OK") {
-                    Log.w(tag, "VISIONOS playabilityStatus for $cleanId: $status (attempt $attempt)")
-                    if (attempt == 0) {
-                        visitorData = getOrFetchVisitorData(forceRefresh = true)
-                        continue
                     }
-                    return null
-                }
 
-                val streamingData = json.optJSONObject("streamingData") ?: continue
-                val adaptiveFormats = streamingData.optJSONArray("adaptiveFormats") ?: continue
+                    val reqBuilder = Request.Builder()
+                        .url("$endpoint/player?prettyPrint=false&id=$cleanId&key=${sessionMgr.apiKey}")
+                        .header("User-Agent", AnonymousSessionManager.UA_VISION_OS)
+                        .header("Content-Type", "application/json")
+                        .header("X-Goog-Api-Format-Version", "2")
+                        .header("X-Youtube-Client-Name", "101")
+                        .header("X-Youtube-Client-Version", "1.02")
+                        .header("Origin", "https://www.youtube.com")
+                        .header("Cookie", sessionMgr.getAnonymousCookieHeader(visitorData))
+                        .post(payload.toString().toRequestBody(jsonMediaType))
 
-                var chosenUrl: String? = null
-                var highestBitrate = 0
+                    if (!visitorData.isNullOrEmpty()) {
+                        reqBuilder.header("X-Goog-Visitor-Id", visitorData)
+                    }
 
-                for (i in 0 until adaptiveFormats.length()) {
-                    val format = adaptiveFormats.optJSONObject(i) ?: continue
-                    val mimeType = format.optString("mimeType")
-                    if (mimeType.contains("audio/")) {
-                        val bitrate = format.optInt("bitrate", 0)
-                        val url = format.optString("url")
-                        if (url.isNotEmpty() && bitrate > highestBitrate) {
-                            highestBitrate = bitrate
-                            chosenUrl = url
+                    val response = client.newCall(reqBuilder.build()).execute()
+                    val body = response.body?.string() ?: continue
+                    val json = JSONObject(body)
+
+                    val playability = json.optJSONObject("playabilityStatus")
+                    val status = playability?.optString("status")
+                    if (status != "OK") {
+                        Log.w(tag, "VISIONOS playabilityStatus for $cleanId: $status (attempt $attempt) via $endpoint")
+                        if (attempt == 0) {
+                            visitorData = sessionMgr.getOrFetchVisitorData(force = true)
+                            continue
+                        }
+                        break
+                    }
+
+                    val streamingData = json.optJSONObject("streamingData") ?: continue
+                    val adaptiveFormats = streamingData.optJSONArray("adaptiveFormats") ?: continue
+
+                    var chosenUrl: String? = null
+                    var highestBitrate = 0
+
+                    for (i in 0 until adaptiveFormats.length()) {
+                        val format = adaptiveFormats.optJSONObject(i) ?: continue
+                        val mimeType = format.optString("mimeType")
+                        if (mimeType.contains("audio/")) {
+                            val bitrate = format.optInt("bitrate", 0)
+                            val url = format.optString("url")
+                            if (url.isNotEmpty() && bitrate > highestBitrate) {
+                                highestBitrate = bitrate
+                                chosenUrl = url
+                            }
                         }
                     }
+                    if (!chosenUrl.isNullOrEmpty()) {
+                        healthMgr.recordSuccess(endpoint, System.currentTimeMillis() - start)
+                        return chosenUrl
+                    }
+                } catch (e: Exception) {
+                    healthMgr.recordFailure(endpoint)
+                    Log.w(tag, "VISIONOS resolution error for $cleanId via $endpoint: ${e.message}")
                 }
-                if (!chosenUrl.isNullOrEmpty()) {
-                    return chosenUrl
-                }
-            } catch (e: Exception) {
-                Log.w(tag, "VISIONOS resolution error for $cleanId (attempt $attempt)", e)
             }
         }
         return null
@@ -616,12 +615,14 @@ class YouTubeStreamResolver(
     }
 
     private fun resolveViaInvidious(videoId: String): String? {
-        val instances = listOf("https://invidious.f5.si", "https://inv.vern.cc")
+        val cleanId = videoId.removePrefix("ytv_").trim()
+        val instances = EndpointHealthManager.getInstance().getRankedInvidiousInstances().take(3)
         for (instance in instances) {
+            val start = System.currentTimeMillis()
             try {
                 val request = Request.Builder()
-                    .url("$instance/api/v1/videos/$videoId")
-                    .header("User-Agent", "Mozilla/5.0")
+                    .url("$instance/api/v1/videos/$cleanId")
+                    .header("User-Agent", AnonymousSessionManager.UA_DESKTOP_CHROME)
                     .build()
                 val response = client.newCall(request).execute()
                 val body = response.body?.string() ?: continue
@@ -632,11 +633,15 @@ class YouTubeStreamResolver(
                     val type = format.optString("type")
                     if (type.contains("audio/")) {
                         val url = format.optString("url")
-                        if (url.isNotEmpty()) return url
+                        if (url.isNotEmpty()) {
+                            EndpointHealthManager.getInstance().recordSuccess(instance, System.currentTimeMillis() - start)
+                            return url
+                        }
                     }
                 }
             } catch (e: Exception) {
-                Log.w(tag, "Invidious instance $instance failed: ${e.message}")
+                EndpointHealthManager.getInstance().recordFailure(instance)
+                Log.w(tag, "Invidious instance $instance failed for $cleanId: ${e.message}")
             }
         }
         return null
@@ -644,16 +649,13 @@ class YouTubeStreamResolver(
 
     private fun resolveViaPiped(videoId: String): String? {
         val cleanId = videoId.removePrefix("ytv_").trim()
-        val instances = listOf(
-            "https://api.piped.private.coffee",
-            "https://pipedapi.kavin.rocks",
-            "https://pipedapi.adminforge.de"
-        )
+        val instances = EndpointHealthManager.getInstance().getRankedPipedInstances().take(3)
         for (instance in instances) {
+            val start = System.currentTimeMillis()
             try {
                 val request = Request.Builder()
                     .url("$instance/streams/$cleanId")
-                    .header("User-Agent", "Mozilla/5.0")
+                    .header("User-Agent", AnonymousSessionManager.UA_DESKTOP_CHROME)
                     .build()
                 val response = client.newCall(request).execute()
                 val body = response.body?.string() ?: continue
@@ -670,8 +672,12 @@ class YouTubeStreamResolver(
                         bestUrl = url
                     }
                 }
-                if (!bestUrl.isNullOrEmpty()) return bestUrl
+                if (!bestUrl.isNullOrEmpty()) {
+                    EndpointHealthManager.getInstance().recordSuccess(instance, System.currentTimeMillis() - start)
+                    return bestUrl
+                }
             } catch (e: Exception) {
+                EndpointHealthManager.getInstance().recordFailure(instance)
                 Log.w(tag, "Piped instance $instance audio failed for $cleanId: ${e.message}")
             }
         }
@@ -684,26 +690,44 @@ class YouTubeStreamResolver(
      */
     suspend fun resolveVideoQualities(song: Song): List<VideoQuality> = withContext(Dispatchers.IO) {
         val videoId = song.sourceId.removePrefix("ytv_").trim()
-        val visitorData = getOrFetchVisitorData(forceRefresh = false)
+
+        // 0. Check ultra-fast LRU quality cache
+        val cached = StreamUrlCache.get(videoId)
+        if (!cached?.qualities.isNullOrEmpty()) {
+            Log.d(tag, "StreamUrlCache qualities HIT for $videoId")
+            return@withContext cached!!.qualities
+        }
+
+        val sessionMgr = AnonymousSessionManager.getInstance()
+        val visitorData = sessionMgr.getOrFetchVisitorData(force = false)
         
         // 1. Try VISIONOS InnerTube client with fresh visitorData
         val visionQualities = extractQualitiesViaInnerTube(
             videoId = videoId,
-            contextObj = getVisionOsContext(visitorData),
-            userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15",
+            contextObj = sessionMgr.getVisionOsContext(visitorData),
+            userAgent = AnonymousSessionManager.UA_VISION_OS,
             clientNameHeader = "101",
             clientVersionHeader = "1.02",
             visitorData = visitorData
         )
-        if (visionQualities.isNotEmpty()) return@withContext visionQualities
+        if (visionQualities.isNotEmpty()) {
+            StreamUrlCache.put(videoId, streamUrl = visionQualities.firstOrNull()?.audioUrl, qualities = visionQualities)
+            return@withContext visionQualities
+        }
 
-        // 2. Try Piped API fallback
+        // 2. Try Piped API fallback with dynamic latency ranking
         val pipedQualities = extractQualitiesViaPiped(videoId)
-        if (pipedQualities.isNotEmpty()) return@withContext pipedQualities
+        if (pipedQualities.isNotEmpty()) {
+            StreamUrlCache.put(videoId, streamUrl = pipedQualities.firstOrNull()?.audioUrl, qualities = pipedQualities)
+            return@withContext pipedQualities
+        }
 
-        // 3. Fallback to Invidious
+        // 3. Fallback to Invidious with dynamic latency ranking
         val invidiousQualities = extractQualitiesViaInvidious(videoId)
-        if (invidiousQualities.isNotEmpty()) return@withContext invidiousQualities
+        if (invidiousQualities.isNotEmpty()) {
+            StreamUrlCache.put(videoId, streamUrl = invidiousQualities.firstOrNull()?.audioUrl, qualities = invidiousQualities)
+            return@withContext invidiousQualities
+        }
 
         emptyList()
     }
@@ -717,96 +741,105 @@ class YouTubeStreamResolver(
         visitorData: String? = null
     ): List<VideoQuality> {
         val cleanId = videoId.removePrefix("ytv_").trim()
-        try {
-            val payload = JSONObject().apply {
-                put("context", contextObj)
-                put("videoId", cleanId)
-                put("contentCheckOk", true)
-                put("racyCheckOk", true)
-                put("playbackContext", JSONObject().apply {
-                    put("contentPlaybackContext", JSONObject().apply {
-                        put("html5Preference", "HTML5_PREF_WANTS")
+        val sessionMgr = AnonymousSessionManager.getInstance()
+        val healthMgr = EndpointHealthManager.getInstance()
+        val endpoints = healthMgr.getRankedInnerTubeEndpoints()
+
+        for (endpoint in endpoints) {
+            val start = System.currentTimeMillis()
+            try {
+                val payload = JSONObject().apply {
+                    put("context", contextObj)
+                    put("videoId", cleanId)
+                    put("contentCheckOk", true)
+                    put("racyCheckOk", true)
+                    put("playbackContext", JSONObject().apply {
+                        put("contentPlaybackContext", JSONObject().apply {
+                            put("html5Preference", "HTML5_PREF_WANTS")
+                        })
                     })
-                })
-            }
+                }
 
-            val reqBuilder = Request.Builder()
-                .url("$playerGapisUrl?prettyPrint=false&id=$cleanId")
-                .header("User-Agent", userAgent)
-                .header("Content-Type", "application/json")
-                .header("X-Goog-Api-Format-Version", "2")
-                .header("Origin", "https://www.youtube.com")
-                .post(payload.toString().toRequestBody(jsonMediaType))
+                val reqBuilder = Request.Builder()
+                    .url("$endpoint/player?prettyPrint=false&id=$cleanId&key=${sessionMgr.apiKey}")
+                    .header("User-Agent", userAgent)
+                    .header("Content-Type", "application/json")
+                    .header("X-Goog-Api-Format-Version", "2")
+                    .header("Origin", "https://www.youtube.com")
+                    .header("Cookie", sessionMgr.getAnonymousCookieHeader(visitorData))
+                    .post(payload.toString().toRequestBody(jsonMediaType))
 
-            if (!clientNameHeader.isNullOrEmpty()) reqBuilder.header("X-Youtube-Client-Name", clientNameHeader)
-            if (!clientVersionHeader.isNullOrEmpty()) reqBuilder.header("X-Youtube-Client-Version", clientVersionHeader)
-            if (!visitorData.isNullOrEmpty()) reqBuilder.header("X-Goog-Visitor-Id", visitorData)
+                if (!clientNameHeader.isNullOrEmpty()) reqBuilder.header("X-Youtube-Client-Name", clientNameHeader)
+                if (!clientVersionHeader.isNullOrEmpty()) reqBuilder.header("X-Youtube-Client-Version", clientVersionHeader)
+                if (!visitorData.isNullOrEmpty()) reqBuilder.header("X-Goog-Visitor-Id", visitorData)
 
-            val response = client.newCall(reqBuilder.build()).execute()
-            val body = response.body?.string() ?: return emptyList()
-            val json = JSONObject(body)
+                val response = client.newCall(reqBuilder.build()).execute()
+                val body = response.body?.string() ?: continue
+                val json = JSONObject(body)
 
-            val streamingData = json.optJSONObject("streamingData") ?: return emptyList()
-            val adaptiveFormats = streamingData.optJSONArray("adaptiveFormats") ?: return emptyList()
+                val streamingData = json.optJSONObject("streamingData") ?: continue
+                val adaptiveFormats = streamingData.optJSONArray("adaptiveFormats") ?: continue
 
-            var bestAudioUrl: String? = null
-            var bestAudioBitrate = 0
+                var bestAudioUrl: String? = null
+                var bestAudioBitrate = 0
 
-            // Find best audio URL first
-            for (i in 0 until adaptiveFormats.length()) {
-                val format = adaptiveFormats.optJSONObject(i) ?: continue
-                val mimeType = format.optString("mimeType")
-                val url = format.optString("url")
-                if (url.isNotEmpty() && mimeType.contains("audio/")) {
-                    val bitrate = format.optInt("bitrate", 0)
-                    if (bitrate > bestAudioBitrate) {
-                        bestAudioBitrate = bitrate
-                        bestAudioUrl = url
+                // Find best audio URL first
+                for (i in 0 until adaptiveFormats.length()) {
+                    val format = adaptiveFormats.optJSONObject(i) ?: continue
+                    val mimeType = format.optString("mimeType")
+                    val url = format.optString("url")
+                    if (url.isNotEmpty() && mimeType.contains("audio/")) {
+                        val bitrate = format.optInt("bitrate", 0)
+                        if (bitrate > bestAudioBitrate) {
+                            bestAudioBitrate = bitrate
+                            bestAudioUrl = url
+                        }
                     }
                 }
-            }
 
-            // Extract distinct video resolutions
-            val qualityMap = mutableMapOf<Int, VideoQuality>()
-            for (i in 0 until adaptiveFormats.length()) {
-                val format = adaptiveFormats.optJSONObject(i) ?: continue
-                val mimeType = format.optString("mimeType")
-                val url = format.optString("url")
-                if (url.isEmpty()) continue
+                // Extract distinct video resolutions
+                val qualityMap = mutableMapOf<Int, VideoQuality>()
+                for (i in 0 until adaptiveFormats.length()) {
+                    val format = adaptiveFormats.optJSONObject(i) ?: continue
+                    val mimeType = format.optString("mimeType")
+                    val url = format.optString("url")
+                    if (url.isEmpty()) continue
 
-                if (mimeType.contains("video/")) {
-                    val height = format.optInt("height", 0)
-                    val label = format.optString("qualityLabel").ifEmpty { "${height}p" }
-                    if (height in 144..1080 && !qualityMap.containsKey(height)) {
-                        qualityMap[height] = VideoQuality(
-                            label = label,
-                            height = height,
-                            videoUrl = url,
-                            audioUrl = bestAudioUrl
-                        )
+                    if (mimeType.contains("video/")) {
+                        val height = format.optInt("height", 0)
+                        val label = format.optString("qualityLabel").ifEmpty { "${height}p" }
+                        if (height in 144..1080 && !qualityMap.containsKey(height)) {
+                            qualityMap[height] = VideoQuality(
+                                label = label,
+                                height = height,
+                                videoUrl = url,
+                                audioUrl = bestAudioUrl
+                            )
+                        }
                     }
                 }
-            }
 
-            return qualityMap.values.sortedByDescending { it.height }
-        } catch (e: Exception) {
-            Log.w(tag, "Error extracting video qualities for $cleanId", e)
-            return emptyList()
+                if (qualityMap.isNotEmpty()) {
+                    healthMgr.recordSuccess(endpoint, System.currentTimeMillis() - start)
+                    return qualityMap.values.sortedByDescending { it.height }
+                }
+            } catch (e: Exception) {
+                healthMgr.recordFailure(endpoint)
+                Log.w(tag, "Error extracting video qualities for $cleanId via $endpoint: ${e.message}")
+            }
         }
+        return emptyList()
     }
 
     private fun extractQualitiesViaPiped(videoId: String): List<VideoQuality> {
         val cleanId = videoId.removePrefix("ytv_").trim()
-        val instances = listOf(
-            "https://api.piped.private.coffee",
-            "https://pipedapi.kavin.rocks",
-            "https://pipedapi.adminforge.de"
-        )
+        val instances = EndpointHealthManager.getInstance().getRankedPipedInstances().take(3)
         for (instance in instances) {
+            val start = System.currentTimeMillis()
             try {
                 val request = Request.Builder()
                     .url("$instance/streams/$cleanId")
-                    .header("User-Agent", "Mozilla/5.0")
+                    .header("User-Agent", AnonymousSessionManager.UA_DESKTOP_CHROME)
                     .build()
                 val response = client.newCall(request).execute()
                 val body = response.body?.string() ?: continue
@@ -843,9 +876,11 @@ class YouTubeStreamResolver(
                     }
                 }
                 if (qualityMap.isNotEmpty()) {
+                    EndpointHealthManager.getInstance().recordSuccess(instance, System.currentTimeMillis() - start)
                     return qualityMap.values.sortedByDescending { it.height }
                 }
             } catch (e: Exception) {
+                EndpointHealthManager.getInstance().recordFailure(instance)
                 Log.w(tag, "Piped instance $instance video qualities failed for $cleanId: ${e.message}")
             }
         }
@@ -853,12 +888,14 @@ class YouTubeStreamResolver(
     }
 
     private fun extractQualitiesViaInvidious(videoId: String): List<VideoQuality> {
-        val instances = listOf("https://invidious.f5.si", "https://inv.vern.cc")
+        val cleanId = videoId.removePrefix("ytv_").trim()
+        val instances = EndpointHealthManager.getInstance().getRankedInvidiousInstances().take(3)
         for (instance in instances) {
+            val start = System.currentTimeMillis()
             try {
                 val request = Request.Builder()
-                    .url("$instance/api/v1/videos/$videoId")
-                    .header("User-Agent", "Mozilla/5.0")
+                    .url("$instance/api/v1/videos/$cleanId")
+                    .header("User-Agent", AnonymousSessionManager.UA_DESKTOP_CHROME)
                     .build()
                 val response = client.newCall(request).execute()
                 val body = response.body?.string() ?: continue
@@ -897,9 +934,12 @@ class YouTubeStreamResolver(
                     }
                 }
                 if (qualityMap.isNotEmpty()) {
+                    EndpointHealthManager.getInstance().recordSuccess(instance, System.currentTimeMillis() - start)
                     return qualityMap.values.sortedByDescending { it.height }
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                EndpointHealthManager.getInstance().recordFailure(instance)
+            }
         }
         return emptyList()
     }
@@ -917,46 +957,15 @@ class YouTubeStreamResolver(
     }
 
     private fun getWebContext(): JSONObject {
-        return JSONObject().apply {
-            put("client", JSONObject().apply {
-                put("clientName", "WEB")
-                put("clientVersion", "2.20241001.01.00")
-                put("hl", "vi")
-                put("gl", "VN")
-            })
-        }
+        return AnonymousSessionManager.getInstance().getWebContext()
     }
 
     private fun getWebRemixContext(): JSONObject {
-        return JSONObject().apply {
-            put("client", JSONObject().apply {
-                put("clientName", "WEB_REMIX")
-                put("clientVersion", "1.20241001.01.00")
-                put("hl", "vi")
-                put("gl", "VN")
-            })
-        }
+        return AnonymousSessionManager.getInstance().getWebRemixContext()
     }
 
     private fun getVisionOsContext(visitorData: String?): JSONObject {
-        return JSONObject().apply {
-            put("client", JSONObject().apply {
-                put("clientName", "VISIONOS")
-                put("clientVersion", "1.02")
-                put("deviceMake", "Apple")
-                put("deviceModel", "RealityDevice17,1")
-                put("osName", "visionOS")
-                put("osVersion", "26.5.23O471")
-                put("userAgent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15")
-                put("hl", "vi")
-                put("gl", "VN")
-                put("timeZone", "Asia/Ho_Chi_Minh")
-                put("utcOffsetMinutes", 420)
-                if (!visitorData.isNullOrEmpty()) {
-                    put("visitorData", visitorData)
-                }
-            })
-        }
+        return AnonymousSessionManager.getInstance().getVisionOsContext(visitorData)
     }
 
     private fun getAndroidVrContext(): JSONObject {

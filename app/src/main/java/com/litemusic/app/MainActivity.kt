@@ -119,6 +119,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import com.litemusic.app.core.queue.PlaybackQueueManager
+import com.litemusic.app.core.queue.QueueSource
+import com.litemusic.app.ui.queue.QueueSheet
 
 class MainActivity : ComponentActivity() {
 
@@ -577,7 +580,12 @@ fun MainAppScreen(
     // Double-tap Skip Duration & Queue state
     var skipDurationSeconds by remember { mutableIntStateOf(ThemePreferences.getSkipDuration(context)) }
     var activeSong by remember { mutableStateOf<Song?>(currentSong) }
-    var songQueue by remember { mutableStateOf<List<Song>>(emptyList()) }
+    val playbackQueueManager = remember { PlaybackQueueManager.getInstance() }
+    val queueState by playbackQueueManager.queueState.collectAsState()
+    var isQueueSheetOpen by remember { mutableStateOf(false) }
+    val songQueue = remember(queueState) {
+        queueState.manualQueue.map { it.song } + queueState.autoQueue.map { it.song }
+    }
 
     // AI Music Generator State
     val aiGenerator = remember { AiPlaylistGenerator(context) }
@@ -594,9 +602,10 @@ fun MainAppScreen(
         currentTitle = song.title
         currentArtist = song.artist
         currentArtwork = song.thumbnailUrl
+        playbackQueueManager.setNowPlaying(song)
 
-        // Auto-queue related tracks if standalone track and queue is empty
-        if (isAutoQueueRelated && songQueue.isEmpty()) {
+        // Auto-queue related tracks if standalone track and auto queue is empty
+        if (isAutoQueueRelated && playbackQueueManager.queueState.value.autoQueue.isEmpty()) {
             coroutineScope.launch(Dispatchers.IO) {
                 try {
                     val liveRelated = onGetRelatedSongs?.invoke(song) ?: emptyList()
@@ -610,8 +619,8 @@ fun MainAppScreen(
                     val filtered = libraryManager.filterBlocked(related).filterNot { it.id == song.id }
                     if (filtered.isNotEmpty()) {
                         withContext(Dispatchers.Main) {
-                            if (songQueue.isEmpty()) {
-                                songQueue = filtered
+                            if (playbackQueueManager.queueState.value.autoQueue.isEmpty()) {
+                                playbackQueueManager.setAutoQueueSongs(filtered, QueueSource.RADIO)
                             }
                         }
                     }
@@ -623,9 +632,8 @@ fun MainAppScreen(
     }
 
     fun playNextInQueue() {
-        if (songQueue.isNotEmpty()) {
-            val next = songQueue.first()
-            songQueue = songQueue.drop(1)
+        val next = playbackQueueManager.popNextSong()
+        if (next != null) {
             playTrack(next, isVideoMode)
         } else {
             mediaController?.seekToNextMediaItem()
@@ -650,8 +658,9 @@ fun MainAppScreen(
         currentArtwork = ""
         currentPositionMs = 0L
         durationMs = 0L
-        songQueue = emptyList()
+        playbackQueueManager.clearAllQueue()
         isPlayerSheetOpen = false
+        isQueueSheetOpen = false
         Toast.makeText(context, context.getString(R.string.toast_stopped_playback), Toast.LENGTH_SHORT).show()
     }
 
@@ -756,7 +765,7 @@ fun MainAppScreen(
                     } else if (repeatMode == Player.REPEAT_MODE_ONE) {
                         mediaController?.seekTo(0)
                         mediaController?.play()
-                    } else if (songQueue.isNotEmpty()) {
+                    } else if (playbackQueueManager.hasUpcoming()) {
                         playNextInQueue()
                     } else if (isInfinitePlayback && !isLoadingInfinite) {
                         coroutineScope.launch {
@@ -774,8 +783,8 @@ fun MainAppScreen(
                                     )
                                     val filtered = libraryManager.filterBlocked(newSongs).filterNot { it.id == base.id }
                                     if (filtered.isNotEmpty()) {
-                                        songQueue = filtered
-                                        playTrack(filtered.first(), isVideoMode)
+                                        playbackQueueManager.setAutoQueueSongs(filtered, QueueSource.AUTOPLAY)
+                                        playNextInQueue()
                                         Toast.makeText(context, context.getString(R.string.toast_infinite_added, filtered.size), Toast.LENGTH_SHORT).show()
                                     }
                                 }
@@ -1137,7 +1146,7 @@ fun MainAppScreen(
                                                 Toast.makeText(context, if (isFav) context.getString(R.string.toast_added_to_favorites) else context.getString(R.string.toast_removed_from_favorites), Toast.LENGTH_SHORT).show()
                                             },
                                             onAddToQueue = {
-                                                songQueue = songQueue + song
+                                                playbackQueueManager.addToManualQueue(song)
                                                 Toast.makeText(context, context.getString(R.string.toast_added_to_queue, song.title), Toast.LENGTH_SHORT).show()
                                             },
                                             onBlockSong = {
@@ -1168,7 +1177,7 @@ fun MainAppScreen(
                             searchResults = searchResults,
                             onPlaySong = { song -> playTrack(song) },
                             onAddToQueue = { song ->
-                                songQueue = songQueue + song
+                                playbackQueueManager.addToManualQueue(song)
                                 Toast.makeText(context, context.getString(R.string.toast_added_to_queue, song.title), Toast.LENGTH_SHORT).show()
                             },
                             onToggleFavorite = { song ->
@@ -1210,11 +1219,12 @@ fun MainAppScreen(
                             onPlayAll = { songs ->
                                 if (songs.isNotEmpty()) {
                                     playTrack(songs.first())
-                                    songQueue = songs.drop(1)
+                                    playbackQueueManager.clearAllQueue()
+                                    playbackQueueManager.addMultipleToManualQueue(songs.drop(1), QueueSource.PLAYLIST)
                                 }
                             },
                             onAddToQueue = { song ->
-                                songQueue = songQueue + song
+                                playbackQueueManager.addToManualQueue(song)
                                 Toast.makeText(context, context.getString(R.string.toast_added_to_queue, song.title), Toast.LENGTH_SHORT).show()
                             },
                             isGlass = isGlass
@@ -1359,16 +1369,20 @@ fun MainAppScreen(
                 skipDurationSeconds = skipDurationSeconds,
                 songQueue = songQueue,
                 onPlayQueueSong = { qSong ->
-                    songQueue = songQueue.filterNot { it.id == qSong.id }
+                    val entry = queueState.manualQueue.find { it.song.id == qSong.id } ?: queueState.autoQueue.find { it.song.id == qSong.id }
+                    if (entry != null) {
+                        playbackQueueManager.removeEntry(entry.queueEntryId)
+                    }
                     playTrack(qSong, isVideoMode)
                 },
                 onRemoveFromQueue = { idx ->
                     if (idx in songQueue.indices) {
-                        songQueue = songQueue.toMutableList().apply { removeAt(idx) }
+                        val entry = queueState.manualQueue.getOrNull(idx) ?: queueState.autoQueue.getOrNull(idx - queueState.manualQueue.size)
+                        entry?.let { playbackQueueManager.removeEntry(it.queueEntryId) }
                     }
                 },
                 onClearQueue = {
-                    songQueue = emptyList()
+                    playbackQueueManager.clearAllQueue()
                     Toast.makeText(context, context.getString(R.string.toast_queue_cleared), Toast.LENGTH_SHORT).show()
                 },
                 onRefreshQueue = {
@@ -1385,7 +1399,7 @@ fun MainAppScreen(
                             )
                             val filtered = libraryManager.filterBlocked(newSongs).filterNot { it.id == base.id }
                             if (filtered.isNotEmpty()) {
-                                songQueue = filtered
+                                playbackQueueManager.setAutoQueueSongs(filtered, QueueSource.RADIO)
                                 Toast.makeText(context, context.getString(R.string.toast_queue_refreshed, filtered.size), Toast.LENGTH_SHORT).show()
                             } else {
                                 Toast.makeText(context, context.getString(R.string.toast_home_refreshing), Toast.LENGTH_SHORT).show()
@@ -1430,8 +1444,8 @@ fun MainAppScreen(
                     val next = !isShuffleEnabled
                     isShuffleEnabled = next
                     mediaController?.shuffleModeEnabled = next
-                    if (next && songQueue.isNotEmpty()) {
-                        songQueue = songQueue.shuffled()
+                    playbackQueueManager.setShuffled(next)
+                    if (next && playbackQueueManager.hasUpcoming()) {
                         Toast.makeText(context, context.getString(R.string.toast_queue_shuffled), Toast.LENGTH_SHORT).show()
                     } else {
                         Toast.makeText(context, if (next) context.getString(R.string.player_shuffle_on) else context.getString(R.string.player_shuffle_off), Toast.LENGTH_SHORT).show()
@@ -1439,8 +1453,59 @@ fun MainAppScreen(
                 },
                 availableVideoQualities = availableVideoQualities,
                 selectedVideoQuality = selectedVideoQuality,
-                onChangeVideoQuality = onChangeVideoQuality
+                onChangeVideoQuality = onChangeVideoQuality,
+                onOpenQueue = { isQueueSheetOpen = true },
+                queueUpcomingCount = queueState.totalUpcomingCount
             )
+        }
+
+        // Dedicated Professional Queue Sheet (P0 Redesign)
+        if (isQueueSheetOpen) {
+            QueueSheet(
+                isOpen = isQueueSheetOpen,
+                onClose = { isQueueSheetOpen = false },
+                currentSong = activeSong ?: currentSong,
+                isPlaying = isPlaying,
+                onPlayPause = {
+                    mediaController?.let {
+                        if (it.isPlaying) it.pause() else it.play()
+                    }
+                },
+                onSkipNext = { playNextInQueue() },
+                onPlaySong = { song ->
+                    playTrack(song, isVideoMode)
+                },
+                onRefreshAutoQueue = {
+                    val base = activeSong ?: currentSong
+                    if (base != null) {
+                        coroutineScope.launch {
+                            val liveRelated = withContext(Dispatchers.IO) { onGetRelatedSongs?.invoke(base) ?: emptyList() }
+                            val candidatePool = (liveRelated + homeSongs + searchResults + libraryManager.getFavorites() + libraryManager.getRecentlyPlayed()).distinctBy { it.id }
+                            val newSongs = LocalHeuristicRanker.recommendRelatedSongs(
+                                baseSong = base,
+                                candidatePool = candidatePool,
+                                targetCount = 25,
+                                historySongs = libraryManager.getRecentlyPlayed()
+                            )
+                            val filtered = libraryManager.filterBlocked(newSongs).filterNot { it.id == base.id }
+                            if (filtered.isNotEmpty()) {
+                                playbackQueueManager.setAutoQueueSongs(filtered, QueueSource.RADIO)
+                                Toast.makeText(context, context.getString(R.string.toast_queue_refreshed, filtered.size), Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, context.getString(R.string.toast_home_refreshing), Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                },
+                onOpenFullPlayer = {
+                    isQueueSheetOpen = false
+                    isPlayerSheetOpen = true
+                }
+            )
+        }
+
+        BackHandler(enabled = isQueueSheetOpen) {
+            isQueueSheetOpen = false
         }
 
         if (showHomeSearchDialog) {
@@ -1472,16 +1537,18 @@ fun MainAppScreen(
                 onPlayNow = { tracks ->
                     if (tracks.isNotEmpty()) {
                         val first = tracks.first()
-                        songQueue = tracks.drop(1)
+                        playbackQueueManager.clearAllQueue()
+                        playbackQueueManager.addMultipleToManualQueue(tracks.drop(1), QueueSource.PLAYLIST)
                         playTrack(first, isVideoMode)
                     }
                 },
                 onAddToQueue = { tracks ->
-                    songQueue = songQueue + tracks
+                    playbackQueueManager.addMultipleToManualQueue(tracks, QueueSource.MANUAL)
                     Toast.makeText(context, context.getString(R.string.toast_added_multiple_to_queue, tracks.size), Toast.LENGTH_SHORT).show()
                 },
                 onPlaySingleTrack = { clickedSong, trackList ->
-                    songQueue = trackList.filterNot { it.id == clickedSong.id }
+                    playbackQueueManager.clearAllQueue()
+                    playbackQueueManager.addMultipleToManualQueue(trackList.filterNot { it.id == clickedSong.id }, QueueSource.PLAYLIST)
                     playTrack(clickedSong, isVideoMode)
                 },
                 onFallbackLocal = {
@@ -2053,7 +2120,9 @@ fun M3FullScreenPlayer(
     onToggleShuffle: () -> Unit = {},
     availableVideoQualities: List<VideoQuality> = emptyList(),
     selectedVideoQuality: VideoQuality? = null,
-    onChangeVideoQuality: (VideoQuality) -> Unit = {}
+    onChangeVideoQuality: (VideoQuality) -> Unit = {},
+    onOpenQueue: () -> Unit = {},
+    queueUpcomingCount: Int = 0
 ) {
     var currentTab by remember { mutableStateOf(FullPlayerTab.NOW_PLAYING) }
     var showSpeedDialog by remember { mutableStateOf(false) }
@@ -2358,15 +2427,14 @@ fun M3FullScreenPlayer(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Queue Button with Badge
-                    IconButton(onClick = {
-                        currentTab = if (currentTab == FullPlayerTab.QUEUE) FullPlayerTab.NOW_PLAYING else FullPlayerTab.QUEUE
-                    }) {
+                    // Queue Button with Badge (opens dedicated Queue Sheet)
+                    IconButton(onClick = onOpenQueue) {
                         BadgedBox(
                             badge = {
-                                if (songQueue.isNotEmpty()) {
+                                val totalCount = if (queueUpcomingCount > 0) queueUpcomingCount else songQueue.size
+                                if (totalCount > 0) {
                                     Badge(containerColor = MaterialTheme.colorScheme.primary) {
-                                        Text("${songQueue.size}", fontSize = 9.sp)
+                                        Text("$totalCount", fontSize = 9.sp)
                                     }
                                 }
                             }
@@ -2374,7 +2442,7 @@ fun M3FullScreenPlayer(
                             Icon(
                                 imageVector = Icons.Default.QueueMusic,
                                 contentDescription = stringResource(R.string.player_queue_title),
-                                tint = if (currentTab == FullPlayerTab.QUEUE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -2489,6 +2557,17 @@ fun M3FullScreenPlayer(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    // Open Dedicated Queue Sheet button
+                                    FilledTonalButton(
+                                        onClick = onOpenQueue,
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.OpenInFull, contentDescription = null, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(stringResource(R.string.queue_sheet_title), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+
                                     // Refresh recommendations button
                                     FilledTonalButton(
                                         onClick = onRefreshQueue,
@@ -3038,32 +3117,35 @@ fun M3FullScreenPlayer(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
-                        currentTab = when (currentTab) {
-                            FullPlayerTab.NOW_PLAYING -> if (lyrics.isNotEmpty()) FullPlayerTab.LYRICS else FullPlayerTab.QUEUE
-                            FullPlayerTab.LYRICS -> FullPlayerTab.QUEUE
-                            FullPlayerTab.QUEUE -> FullPlayerTab.NOW_PLAYING
+                        if (currentTab == FullPlayerTab.LYRICS) {
+                            currentTab = FullPlayerTab.NOW_PLAYING
+                        } else if (lyrics.isNotEmpty()) {
+                            currentTab = FullPlayerTab.LYRICS
+                        } else {
+                            onOpenQueue()
                         }
                     },
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
             ) {
                 Row(modifier = Modifier.padding(12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = when (currentTab) {
                                 FullPlayerTab.NOW_PLAYING -> if (lyrics.isNotEmpty()) stringResource(R.string.player_tap_to_view_lyrics_queue) else stringResource(R.string.player_tap_to_open_queue_simple)
-                                FullPlayerTab.LYRICS -> stringResource(R.string.player_tap_to_open_queue, songQueue.size)
+                                FullPlayerTab.LYRICS -> stringResource(R.string.player_tap_to_return_playing)
                                 FullPlayerTab.QUEUE -> stringResource(R.string.player_tap_to_return_playing)
                             },
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
+                        val totalQueueCount = if (queueUpcomingCount > 0) queueUpcomingCount else songQueue.size
                         Text(
                             text = when (currentTab) {
                                 FullPlayerTab.NOW_PLAYING -> if (lyrics.isNotEmpty()) stringResource(R.string.player_lyrics_count_seek, lyrics.size, skipDurationSeconds) else stringResource(R.string.player_double_tap_seek_hint, skipDurationSeconds)
                                 FullPlayerTab.LYRICS -> stringResource(R.string.player_lyrics_realtime)
-                                FullPlayerTab.QUEUE -> if (songQueue.isNotEmpty()) stringResource(R.string.player_queue_count_desc, songQueue.size) else stringResource(R.string.player_queue_empty)
+                                FullPlayerTab.QUEUE -> if (totalQueueCount > 0) stringResource(R.string.player_queue_count_desc, totalQueueCount) else stringResource(R.string.player_queue_empty)
                             },
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -3072,9 +3154,21 @@ fun M3FullScreenPlayer(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (lyrics.isNotEmpty()) {
-                            Icon(Icons.Default.Lyrics, contentDescription = null, tint = if (currentTab == FullPlayerTab.LYRICS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
+                            IconButton(
+                                onClick = {
+                                    currentTab = if (currentTab == FullPlayerTab.LYRICS) FullPlayerTab.NOW_PLAYING else FullPlayerTab.LYRICS
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.Lyrics, contentDescription = null, tint = if (currentTab == FullPlayerTab.LYRICS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
+                            }
                         }
-                        Icon(Icons.Default.QueueMusic, contentDescription = null, tint = if (currentTab == FullPlayerTab.QUEUE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
+                        IconButton(
+                            onClick = onOpenQueue,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.Default.QueueMusic, contentDescription = stringResource(R.string.player_queue_title), tint = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
             }

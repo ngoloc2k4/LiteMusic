@@ -67,6 +67,77 @@ class LibraryManager private constructor(context: Context) {
         prefs.edit().remove("recent_json").apply()
     }
 
+    // --- CUSTOM PLAYLISTS ---
+    data class CustomPlaylist(
+        val id: String = java.util.UUID.randomUUID().toString(),
+        val title: String,
+        val songs: List<Song>,
+        val createdAt: Long = System.currentTimeMillis()
+    )
+
+    fun getCustomPlaylists(): List<CustomPlaylist> {
+        val json = prefs.getString("custom_playlists_json", "[]") ?: "[]"
+        val list = mutableListOf<CustomPlaylist>()
+        try {
+            val arr = JSONArray(json)
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val id = obj.optString("id", java.util.UUID.randomUUID().toString())
+                val title = obj.optString("title", "Playlist")
+                val songsJson = obj.optString("songs", "[]")
+                val createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                list.add(
+                    CustomPlaylist(
+                        id = id,
+                        title = title,
+                        songs = parseSongList(songsJson),
+                        createdAt = createdAt
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+        return list
+    }
+
+    fun saveCustomPlaylist(playlist: CustomPlaylist) {
+        val current = getCustomPlaylists().toMutableList()
+        val idx = current.indexOfFirst { it.id == playlist.id }
+        if (idx >= 0) {
+            current[idx] = playlist
+        } else {
+            current.add(0, playlist)
+        }
+        persistPlaylists(current)
+    }
+
+    fun createPlaylist(name: String, songs: List<Song>): CustomPlaylist {
+        val pl = CustomPlaylist(title = name.trim().ifEmpty { "My Queue Playlist" }, songs = songs)
+        val current = getCustomPlaylists().toMutableList()
+        current.add(0, pl)
+        persistPlaylists(current)
+        return pl
+    }
+
+    fun deleteCustomPlaylist(id: String) {
+        val current = getCustomPlaylists().toMutableList()
+        current.removeAll { it.id == id }
+        persistPlaylists(current)
+    }
+
+    private fun persistPlaylists(playlists: List<CustomPlaylist>) {
+        val arr = JSONArray()
+        for (p in playlists) {
+            val obj = JSONObject().apply {
+                put("id", p.id)
+                put("title", p.title)
+                put("songs", serializeSongList(p.songs))
+                put("createdAt", p.createdAt)
+            }
+            arr.put(obj)
+        }
+        prefs.edit().putString("custom_playlists_json", arr.toString()).apply()
+    }
+
     // --- BLOCKLIST (SONGS & ARTISTS) ---
     fun getBlockedSongIds(): Set<String> {
         return prefs.getStringSet("blocked_song_ids", emptySet()) ?: emptySet()

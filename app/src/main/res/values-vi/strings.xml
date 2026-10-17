@@ -294,4 +294,33 @@
     <string name="manage_cache">Dữ liệu &amp; Bộ nhớ</string>
     <string name="home_play_all">Phát tất cả</string>
     <string name="source_all">Tất cả</string>
+
+    <!-- Enhanced Queue Playlist -->
+    <string name="queue_header_title">Hàng đợi phát</string>
+    <string name="queue_header_subtitle">%1$d bài tiếp theo • %2$s</string>
+    <string name="queue_now_playing_badge">ĐANG PHÁT</string>
+    <string name="queue_up_next_manual">TIẾP THEO TỪ BẠN</string>
+    <string name="queue_up_next_empty">Chưa có bài nào trong hàng đợi</string>
+    <string name="queue_up_next_empty_hint">Nhấn (+) hoặc \'Phát tiếp theo\' trên bất kỳ bài nào để thêm vào đây</string>
+    <string name="queue_auto_suggestions">GỢI Ý TỰ ĐỘNG</string>
+    <string name="queue_auto_desc">Đề xuất dựa trên nội dung đang nghe</string>
+    <string name="queue_auto_toggle">Tự động phát tiếp</string>
+    <string name="queue_refresh_suggestions">Làm mới</string>
+    <string name="queue_play_now">Phát ngay</string>
+    <string name="queue_play_next">Phát tiếp theo</string>
+    <string name="queue_move_up">Di chuyển lên</string>
+    <string name="queue_move_down">Di chuyển xuống</string>
+    <string name="queue_save_playlist">Lưu thành playlist</string>
+    <string name="queue_clear_manual">Xóa danh sách của bạn</string>
+    <string name="queue_clear_all">Xóa toàn bộ hàng đợi</string>
+    <string name="queue_undo">Hoàn tác</string>
+    <string name="queue_removed_msg">Đã xóa \"%1$s\" khỏi hàng đợi</string>
+    <string name="queue_source_manual">Thủ công</string>
+    <string name="queue_source_radio">Radio</string>
+    <string name="queue_source_ai">AI Mix</string>
+    <string name="queue_source_playlist">Playlist</string>
+    <string name="queue_save_playlist_title">Đặt tên danh sách phát</string>
+    <string name="queue_save_playlist_success">Đã lưu hàng đợi thành playlist: %1$s</string>
+    <string name="queue_promoted_msg">Đã thêm \"%1$s\" vào hàng đợi của bạn</string>
+    <string name="queue_sheet_title">Hàng đợi</string>
 </resources>

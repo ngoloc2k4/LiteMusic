@@ -116,6 +116,7 @@ fun SettingsScreen(
             onMaxCacheChange = { newMax ->
                 maxCacheMb = newMax
                 AudioCacheManager.setMaxCacheSizeMb(context, newMax)
+                usedCacheMb = AudioCacheManager.getUsedCacheSizeMb(context)
             },
             onClear = {
                 val freedBytes = AudioCacheManager.clearAllCache(context)

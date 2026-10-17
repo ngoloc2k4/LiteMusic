@@ -7,6 +7,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,6 +17,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.litemusic.app.R
@@ -40,12 +44,18 @@ fun AiSettingsSection(
     var customOpenAiUrl by remember { mutableStateOf(AiKeyStorage.getCustomOpenAiUrl(context)) }
     var autoFallback by remember { mutableStateOf(AiKeyStorage.isAutoFallbackLocal(context)) }
 
+    var isGroqKeyVisible by remember { mutableStateOf(false) }
+    var isGeminiKeyVisible by remember { mutableStateOf(false) }
+    var isOpenRouterKeyVisible by remember { mutableStateOf(false) }
+    var isCustomOpenAiKeyVisible by remember { mutableStateOf(false) }
+
     var cachedModels by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedModel by remember { mutableStateOf(AiKeyStorage.getSelectedModel(context, selectedProvider)) }
     var isRefreshingModels by remember { mutableStateOf(false) }
 
     // Load cached models
     LaunchedEffect(selectedProvider) {
+        selectedModel = AiKeyStorage.getSelectedModel(context, selectedProvider)
         val cached = AiKeyStorage.getCachedModels(context, selectedProvider)
         if (cached != null && !cached.isExpired && cached.models.isNotEmpty()) {
             cachedModels = cached.models
@@ -130,6 +140,15 @@ fun AiSettingsSection(
                             label = { Text(stringResource(R.string.ai_settings_groq_label)) },
                             placeholder = { Text("gsk_...") },
                             singleLine = true,
+                            visualTransformation = if (isGroqKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { isGroqKeyVisible = !isGroqKeyVisible }) {
+                                    Icon(
+                                        imageVector = if (isGroqKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = if (isGroqKeyVisible) "Hide API key" else "Show API key"
+                                    )
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text(stringResource(R.string.ai_settings_groq_desc), fontSize = 11.sp, color = Color(0xFF10B981))
@@ -145,6 +164,15 @@ fun AiSettingsSection(
                         label = { Text(stringResource(R.string.ai_settings_gemini_label)) },
                         placeholder = { Text("AIzaSy...") },
                         singleLine = true,
+                        visualTransformation = if (isGeminiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { isGeminiKeyVisible = !isGeminiKeyVisible }) {
+                                Icon(
+                                    imageVector = if (isGeminiKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (isGeminiKeyVisible) "Hide API key" else "Show API key"
+                                )
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -158,6 +186,15 @@ fun AiSettingsSection(
                         label = { Text(stringResource(R.string.ai_settings_openrouter_label)) },
                         placeholder = { Text("sk-or-v1-...") },
                         singleLine = true,
+                        visualTransformation = if (isOpenRouterKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { isOpenRouterKeyVisible = !isOpenRouterKeyVisible }) {
+                                Icon(
+                                    imageVector = if (isOpenRouterKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (isOpenRouterKeyVisible) "Hide API key" else "Show API key"
+                                )
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -183,6 +220,15 @@ fun AiSettingsSection(
                             label = { Text(stringResource(R.string.ai_settings_openai_key_label)) },
                             placeholder = { Text("sk-...") },
                             singleLine = true,
+                            visualTransformation = if (isCustomOpenAiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { isCustomOpenAiKeyVisible = !isCustomOpenAiKeyVisible }) {
+                                    Icon(
+                                        imageVector = if (isCustomOpenAiKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = if (isCustomOpenAiKeyVisible) "Hide API key" else "Show API key"
+                                    )
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }

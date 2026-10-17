@@ -90,7 +90,12 @@ class OpenAiCompatibleProvider(
             return@withContext LlmResult.Error("API Key is missing. Please configure in Settings.", isRetryable = false)
         }
 
-        val chosenModel = request.model?.ifBlank { null } ?: fallbackModels.first()
+        val rawModel = request.model?.ifBlank { null } ?: fallbackModels.first()
+        val chosenModel = if (id == "groq" && (rawModel.contains("/") || rawModel.contains("qwen", ignoreCase = true))) {
+            fallbackModels.first()
+        } else {
+            rawModel
+        }
         val url = "${getEffectiveBaseUrl()}/chat/completions"
 
         val messagesArr = JSONArray()

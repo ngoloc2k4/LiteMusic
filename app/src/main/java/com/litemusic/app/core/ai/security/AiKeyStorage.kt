@@ -75,23 +75,45 @@ object AiKeyStorage {
         getPrefs(context).edit().putString(KEY_CUSTOM_OPENAI_URL, url.trim()).apply()
     }
 
+    const val GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile"
+    val GROQ_VALID_MODELS = setOf(
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "mixtral-8x7b-32768",
+        "gemma2-9b-it",
+        "llama3-70b-8192",
+        "llama3-8b-8192"
+    )
+
     fun getSelectedModel(context: Context, providerId: String): String {
         return when (providerId) {
             "openrouter" -> getPrefs(context).getString(KEY_OPENROUTER_MODEL, "meta-llama/llama-3.1-8b-instruct:free") ?: "meta-llama/llama-3.1-8b-instruct:free"
-            "groq" -> getPrefs(context).getString(KEY_GROQ_MODEL, "llama-3.3-70b-versatile") ?: "llama-3.3-70b-versatile"
+            "groq" -> {
+                val saved = getPrefs(context).getString(KEY_GROQ_MODEL, GROQ_DEFAULT_MODEL) ?: GROQ_DEFAULT_MODEL
+                if (saved.contains("/") || saved.contains("qwen", ignoreCase = true) || !GROQ_VALID_MODELS.contains(saved)) {
+                    GROQ_DEFAULT_MODEL
+                } else {
+                    saved
+                }
+            }
             "custom_openai" -> getPrefs(context).getString(KEY_CUSTOM_OPENAI_MODEL, "gpt-4o-mini") ?: "gpt-4o-mini"
             else -> getPrefs(context).getString(KEY_GEMINI_MODEL, "gemini-2.5-flash") ?: "gemini-2.5-flash"
         }
     }
 
     fun setSelectedModel(context: Context, providerId: String, model: String) {
+        val sanitizedModel = if (providerId == "groq" && (model.contains("/") || model.contains("qwen", ignoreCase = true) || !GROQ_VALID_MODELS.contains(model))) {
+            GROQ_DEFAULT_MODEL
+        } else {
+            model
+        }
         val key = when (providerId) {
             "openrouter" -> KEY_OPENROUTER_MODEL
             "groq" -> KEY_GROQ_MODEL
             "custom_openai" -> KEY_CUSTOM_OPENAI_MODEL
             else -> KEY_GEMINI_MODEL
         }
-        getPrefs(context).edit().putString(key, model).apply()
+        getPrefs(context).edit().putString(key, sanitizedModel).apply()
     }
 
     fun isAutoFallbackLocal(context: Context): Boolean {

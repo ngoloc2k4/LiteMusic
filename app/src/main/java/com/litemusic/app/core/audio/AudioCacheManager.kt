@@ -40,9 +40,50 @@ object AudioCacheManager {
             .edit()
             .putInt(KEY_MAX_CACHE_MB, clamped)
             .apply()
+        enforceCacheLimit(context)
+    }
+
+    @Synchronized
+    fun enforceCacheLimit(context: Context) {
+        val maxBytes = getMaxCacheSizeMb(context).toLong() * 1024L * 1024L
+        val cacheDir = File(context.cacheDir, "audio_stream_cache")
+        if (!cacheDir.exists()) return
+
+        var currentSize = calculateDirectorySize(cacheDir)
+        if (currentSize <= maxBytes) return
+
+        // 1. Evict oldest spans through SimpleCache if initialized
+        simpleCache?.let { cache ->
+            try {
+                val spans = cache.keys.flatMap { cache.getCachedSpans(it) }
+                    .sortedBy { it.lastTouchTimestamp }
+                for (span in spans) {
+                    if (currentSize <= maxBytes) break
+                    val len = span.length
+                    cache.removeSpan(span)
+                    currentSize -= len
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 2. Direct pruning of oldest files if directory size still exceeds maxBytes
+        if (currentSize > maxBytes) {
+            val allFiles = cacheDir.walkTopDown()
+                .filter { it.isFile && !it.name.endsWith(".uid") }
+                .sortedBy { it.lastModified() }
+                .toList()
+            for (file in allFiles) {
+                if (currentSize <= maxBytes) break
+                val len = file.length()
+                if (file.delete()) {
+                    currentSize -= len
+                }
+            }
+        }
     }
 
     fun getUsedCacheSizeBytes(context: Context): Long {
+        enforceCacheLimit(context)
         val cacheDir = File(context.cacheDir, "audio_stream_cache")
         return calculateDirectorySize(cacheDir)
     }
@@ -64,6 +105,7 @@ object AudioCacheManager {
     @Synchronized
     fun getCache(context: Context): SimpleCache {
         if (simpleCache == null) {
+            enforceCacheLimit(context)
             val maxBytes = getMaxCacheSizeMb(context).toLong() * 1024L * 1024L
             val cacheDir = File(context.cacheDir, "audio_stream_cache")
             val evictor = LeastRecentlyUsedCacheEvictor(maxBytes)

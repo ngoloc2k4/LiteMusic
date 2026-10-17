@@ -55,6 +55,7 @@ import androidx.media3.session.SessionToken
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.google.common.util.concurrent.ListenableFuture
+import com.litemusic.app.core.audio.AudioCacheManager
 import com.litemusic.app.core.audio.PlaybackService
 import com.litemusic.app.core.lyrics.LrcLibClient
 import com.litemusic.app.core.lyrics.LyricLine
@@ -214,9 +215,9 @@ class MainActivity : ComponentActivity() {
                     },
                     onClearCache = {
                         try {
-                            val cDir = File(cacheDir, "media_cache")
-                            if (cDir.exists()) cDir.deleteRecursively()
-                            Toast.makeText(this, getString(R.string.toast_cache_cleared, "250"), Toast.LENGTH_SHORT).show()
+                            val freedBytes = AudioCacheManager.clearAllCache(this)
+                            val freedMb = String.format(java.util.Locale.US, "%.1f", freedBytes.toDouble() / (1024.0 * 1024.0))
+                            Toast.makeText(this, getString(R.string.toast_cache_cleared, freedMb), Toast.LENGTH_SHORT).show()
                         } catch (e: Exception) {
                             Toast.makeText(this, getString(R.string.toast_cache_cleared, "0"), Toast.LENGTH_SHORT).show()
                         }
@@ -523,6 +524,7 @@ fun MainAppScreen(
 
     // Homepage Reload & Pull-to-Refresh State
     var refreshHomeTrigger by remember { mutableIntStateOf(0) }
+    var isRefreshingHome by remember { mutableStateOf(false) }
     val homeLazyListState = rememberLazyListState()
     var homePullOffset by remember { mutableFloatStateOf(0f) }
     val homePullThreshold = 130f
@@ -549,8 +551,8 @@ fun MainAppScreen(
 
             override suspend fun onPreFling(available: Velocity): Velocity {
                 if (homePullOffset >= homePullThreshold) {
+                    isRefreshingHome = true
                     refreshHomeTrigger++
-                    Toast.makeText(context, context.getString(R.string.toast_home_refreshing), Toast.LENGTH_SHORT).show()
                 }
                 homePullOffset = 0f
                 return Velocity.Zero
@@ -700,45 +702,93 @@ fun MainAppScreen(
     var isLoadingMoreDiscovery by remember { mutableStateOf(false) }
     var hasMoreDiscovery by remember { mutableStateOf(true) }
 
-    // Dynamic mood-targeted music fetching
+    // Unified Home & Mood Data Fetching (eliminates race conditions and concurrent overwrites)
     LaunchedEffect(selectedMoodFilter, refreshHomeTrigger) {
-        if (selectedMoodFilter != MoodCategory.ALL && !moodSongsCache.containsKey(selectedMoodFilter)) {
-            isLoadingMood = true
-            val query = when (selectedMoodFilter) {
-                MoodCategory.RELAX -> "Chill acoustic thư giãn acoustic"
-                MoodCategory.ENERGY -> "High energy edm remix sôi động"
-                MoodCategory.FOCUS -> "Lofi beats study work tập trung"
-                MoodCategory.ROMANCE -> "Nhạc tình yêu ballad lãng mạn"
-                MoodCategory.PARTY -> "Party edm club remix vinahouse"
-                else -> "Top Music Trending"
-            }
-            try {
-                val res = onSearch(query, AudioSource.YOUTUBE_MUSIC)
-                val filtered = libraryManager.filterBlocked(res)
-                if (filtered.isNotEmpty()) {
-                    moodSongsCache = moodSongsCache + (selectedMoodFilter to filtered)
-                }
-            } catch (_: Exception) {}
-            isLoadingMood = false
+        val isRefresh = refreshHomeTrigger > 0
+        if (isRefresh) {
+            isRefreshingHome = true
         }
+
+        if (selectedMoodFilter == MoodCategory.ALL) {
+            if (homeSongs.isEmpty() || isRefresh) {
+                isLoadingHome = true
+                infiniteDiscoverySongs = emptyList()
+                hasMoreDiscovery = true
+
+                try {
+                    val trending = onSearch("Top Music Trending", AudioSource.YOUTUBE_MUSIC)
+                    homeSongs = libraryManager.filterBlocked(trending)
+                    if (homeSongs.isNotEmpty()) {
+                        currentTitle = homeSongs.first().title
+                        currentArtist = homeSongs.first().artist
+                        currentArtwork = homeSongs.first().thumbnailUrl
+                    }
+
+                    val history = libraryManager.getRecentlyPlayed()
+                    if (history.isNotEmpty() && homeSongs.isNotEmpty()) {
+                        val related = LocalHeuristicRanker.recommendRelatedSongs(
+                            baseSong = history.first(),
+                            candidatePool = homeSongs,
+                            targetCount = 8,
+                            historySongs = history
+                        )
+                        personalizedSongs = libraryManager.filterBlocked(related).filterNot { it.id == history.first().id }
+                    }
+                } catch (_: Exception) {}
+                isLoadingHome = false
+            }
+        } else {
+            // Specific Mood Category Selected
+            if (!moodSongsCache.containsKey(selectedMoodFilter) || isRefresh) {
+                isLoadingMood = true
+                infiniteDiscoverySongs = emptyList()
+                hasMoreDiscovery = true
+
+                val query = when (selectedMoodFilter) {
+                    MoodCategory.RELAX -> "Chill acoustic thư giãn acoustic"
+                    MoodCategory.ENERGY -> "High energy edm remix sôi động"
+                    MoodCategory.FOCUS -> "Lofi beats study work tập trung"
+                    MoodCategory.ROMANCE -> "Nhạc tình yêu ballad lãng mạn"
+                    MoodCategory.PARTY -> "Party edm club remix vinahouse"
+                    else -> "Top Music Trending"
+                }
+                try {
+                    val res = onSearch(query, AudioSource.YOUTUBE_MUSIC)
+                    val filtered = libraryManager.filterBlocked(res)
+                    if (filtered.isNotEmpty()) {
+                        moodSongsCache = moodSongsCache + (selectedMoodFilter to filtered)
+                    }
+                } catch (_: Exception) {}
+                isLoadingMood = false
+            }
+        }
+        isRefreshingHome = false
     }
 
     val currentMoodPool = remember(selectedMoodFilter, homeSongs, moodSongsCache) {
         if (selectedMoodFilter == MoodCategory.ALL) {
             homeSongs
         } else {
-            moodSongsCache[selectedMoodFilter] ?: homeSongs
+            moodSongsCache[selectedMoodFilter] ?: emptyList()
         }
     }
 
     // Deduplicated sections data across Quick Picks, Recommended, Trending, and Discovery
-    val homeSections = remember(currentMoodPool, personalizedSongs) {
+    val homeSections = remember(selectedMoodFilter, currentMoodPool, personalizedSongs) {
         val seen = mutableSetOf<String>()
 
         val qp = currentMoodPool.take(4).also { list -> list.forEach { seen.add(it.id) } }
-        val recCandidates = personalizedSongs.filterNot { it.id in seen } + currentMoodPool.filterNot { it.id in seen }
-        val rec = recCandidates.take(8).also { list -> list.forEach { seen.add(it.id) } }
-        val tr = currentMoodPool.filterNot { it.id in seen }.take(10).also { list -> list.forEach { seen.add(it.id) } }
+
+        // Section 2: For ALL, use personalized recommendations from history + pool.
+        // For Mood categories, populate strictly from mood pool so recommendations match the mood!
+        val rec = if (selectedMoodFilter == MoodCategory.ALL) {
+            val recCandidates = personalizedSongs.filterNot { it.id in seen } + currentMoodPool.filterNot { it.id in seen }
+            recCandidates.take(6).also { list -> list.forEach { seen.add(it.id) } }
+        } else {
+            currentMoodPool.filterNot { it.id in seen }.take(6).also { list -> list.forEach { seen.add(it.id) } }
+        }
+
+        val tr = currentMoodPool.filterNot { it.id in seen }.take(8).also { list -> list.forEach { seen.add(it.id) } }
         val disc = currentMoodPool.filterNot { it.id in seen }.also { list -> list.forEach { seen.add(it.id) } }
 
         HomeSectionsData(
@@ -750,28 +800,49 @@ fun MainAppScreen(
         )
     }
 
-    // Infinite scroll detection: triggers when user scrolls near the bottom
+    // Infinite scroll detection: triggers when user scrolls near the bottom or needs initial seed
     val shouldLoadMoreDiscovery = remember {
         derivedStateOf {
             val layoutInfo = homeLazyListState.layoutInfo
             val totalItems = layoutInfo.totalItemsCount
             val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            totalItems > 0 && lastVisibleIndex >= totalItems - 4
+            totalItems > 0 && lastVisibleIndex >= totalItems - 3
         }
     }
 
-    LaunchedEffect(shouldLoadMoreDiscovery.value) {
-        if (shouldLoadMoreDiscovery.value && !isLoadingMoreDiscovery && !isLoadingHome && hasMoreDiscovery && homeSections.allSectionIds.isNotEmpty()) {
+    LaunchedEffect(shouldLoadMoreDiscovery.value, selectedMoodFilter, currentMoodPool.size) {
+        val combinedCount = homeSections.discovery.size + infiniteDiscoverySongs.size
+        val needsSeed = combinedCount < 6 && currentMoodPool.isNotEmpty()
+        if ((shouldLoadMoreDiscovery.value || needsSeed) && !isLoadingMoreDiscovery && !isLoadingHome && !isLoadingMood && hasMoreDiscovery) {
             isLoadingMoreDiscovery = true
             try {
-                val seedSong = (homeSections.discovery + infiniteDiscoverySongs + homeSections.trending).shuffled().firstOrNull()
-                val candidateSongs = if (seedSong != null) {
-                    val related = onGetRelatedSongs?.invoke(seedSong) ?: emptyList()
-                    related.ifEmpty {
-                        onSearch("${seedSong.artist} hit songs", AudioSource.YOUTUBE_MUSIC)
+                val seedSong = (homeSections.discovery + infiniteDiscoverySongs + homeSections.trending + homeSections.quickPicks).shuffled().firstOrNull()
+                val candidateSongs = if (selectedMoodFilter != MoodCategory.ALL) {
+                    val moodKeyword = when (selectedMoodFilter) {
+                        MoodCategory.RELAX -> "chill acoustic thư giãn"
+                        MoodCategory.ENERGY -> "high energy edm dance remix"
+                        MoodCategory.FOCUS -> "lofi beats study focus"
+                        MoodCategory.ROMANCE -> "tình yêu ballad lãng mạn"
+                        MoodCategory.PARTY -> "party edm club remix"
+                        else -> "top music"
+                    }
+                    if (seedSong != null) {
+                        val related = onGetRelatedSongs?.invoke(seedSong) ?: emptyList()
+                        related.ifEmpty {
+                            onSearch("${seedSong.artist} $moodKeyword", AudioSource.YOUTUBE_MUSIC)
+                        }
+                    } else {
+                        onSearch("$moodKeyword hits", AudioSource.YOUTUBE_MUSIC)
                     }
                 } else {
-                    onSearch("Trending Music Explore", AudioSource.YOUTUBE_MUSIC)
+                    if (seedSong != null) {
+                        val related = onGetRelatedSongs?.invoke(seedSong) ?: emptyList()
+                        related.ifEmpty {
+                            onSearch("${seedSong.artist} hit songs", AudioSource.YOUTUBE_MUSIC)
+                        }
+                    } else {
+                        onSearch("Trending Music Explore", AudioSource.YOUTUBE_MUSIC)
+                    }
                 }
                 val filtered = libraryManager.filterBlocked(candidateSongs)
                 val allKnownIds = homeSections.allSectionIds + infiniteDiscoverySongs.map { it.id }.toSet()
@@ -786,34 +857,6 @@ fun MainAppScreen(
             }
             isLoadingMoreDiscovery = false
         }
-    }
-
-    // Fetch initial live trending music & generate personalized recommendations
-    LaunchedEffect(refreshHomeTrigger) {
-        isLoadingHome = true
-        moodSongsCache = emptyMap()
-        infiniteDiscoverySongs = emptyList()
-        hasMoreDiscovery = true
-
-        val trending = onSearch("Top Music Trending", AudioSource.YOUTUBE_MUSIC)
-        homeSongs = libraryManager.filterBlocked(trending)
-        if (homeSongs.isNotEmpty()) {
-            currentTitle = homeSongs.first().title
-            currentArtist = homeSongs.first().artist
-            currentArtwork = homeSongs.first().thumbnailUrl
-        }
-
-        val history = libraryManager.getRecentlyPlayed()
-        if (history.isNotEmpty() && homeSongs.isNotEmpty()) {
-            val related = LocalHeuristicRanker.recommendRelatedSongs(
-                baseSong = history.first(),
-                candidatePool = homeSongs,
-                targetCount = 8,
-                historySongs = history
-            )
-            personalizedSongs = libraryManager.filterBlocked(related).filterNot { it.id == history.first().id }
-        }
-        isLoadingHome = false
     }
 
     // Debounced search when user types
@@ -966,8 +1009,8 @@ fun MainAppScreen(
                                     coroutineScope.launch {
                                         homeLazyListState.animateScrollToItem(0)
                                     }
+                                    isRefreshingHome = true
                                     refreshHomeTrigger++
-                                    Toast.makeText(context, context.getString(R.string.toast_home_refreshing), Toast.LENGTH_SHORT).show()
                                 } else if (selectedNavTab == 1 && index == 1) {
                                     searchQuery = ""
                                     searchResults = emptyList()
@@ -1040,39 +1083,12 @@ fun MainAppScreen(
                                                 modifier = Modifier.size(18.dp)
                                             )
                                         }
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = "LiteMusic",
-                                                fontSize = 22.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                letterSpacing = (-0.5).sp,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Box(
-                                                modifier = Modifier
-                                                    .padding(start = 3.dp, top = 6.dp)
-                                                    .size(6.dp)
-                                                    .clip(CircleShape)
-                                                    .background(MaterialTheme.colorScheme.primary)
-                                            )
-                                        }
-                                    }
-
-                                    IconButton(
-                                        onClick = {
-                                            refreshHomeTrigger++
-                                            Toast.makeText(context, context.getString(R.string.toast_home_refreshing), Toast.LENGTH_SHORT).show()
-                                        },
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f))
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Refresh,
-                                            contentDescription = stringResource(R.string.home_pull_to_refresh),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(19.dp)
+                                        Text(
+                                            text = "LiteMusic",
+                                            fontSize = 22.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            letterSpacing = (-0.5).sp,
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
                                 }
@@ -1081,7 +1097,7 @@ fun MainAppScreen(
 
                                 // Pull-to-refresh floating indicator pill
                                 AnimatedVisibility(
-                                    visible = homePullOffset > 15f || (isLoadingHome && homeSongs.isNotEmpty()),
+                                    visible = homePullOffset > 15f || isRefreshingHome,
                                     enter = fadeIn() + expandVertically(),
                                     exit = fadeOut() + shrinkVertically()
                                 ) {
@@ -1100,7 +1116,7 @@ fun MainAppScreen(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
-                                                if (isLoadingHome) {
+                                                if (isRefreshingHome) {
                                                     CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
                                                     Text(stringResource(R.string.home_refreshing), fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                                 } else if (homePullOffset >= homePullThreshold) {
@@ -1125,13 +1141,13 @@ fun MainAppScreen(
                                     }
                                 } else {
                                     val combinedDiscovery = remember(homeSections.discovery, infiniteDiscoverySongs, homeSections.allSectionIds) {
-                                        homeSections.discovery + infiniteDiscoverySongs.filterNot { it.id in homeSections.allSectionIds }
+                                        (homeSections.discovery + infiniteDiscoverySongs.filterNot { it.id in homeSections.allSectionIds }).distinctBy { it.id }
                                     }
                                     LazyColumn(
                                         state = homeLazyListState,
                                         modifier = Modifier.fillMaxSize(),
                                         verticalArrangement = Arrangement.spacedBy(14.dp),
-                                        contentPadding = PaddingValues(bottom = 90.dp)
+                                        contentPadding = PaddingValues(bottom = 140.dp)
                                     ) {
                                         // Section 0: YouTube Music Mood Filter Pills
                                         item {
@@ -1153,6 +1169,32 @@ fun MainAppScreen(
                                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                                             color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                                                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Section 0.5: Mood Switch Loading Indicator
+                                        if (isLoadingMood && currentMoodPool.isEmpty()) {
+                                            item {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(vertical = 48.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                        CircularProgressIndicator(
+                                                            modifier = Modifier.size(28.dp),
+                                                            color = MaterialTheme.colorScheme.primary,
+                                                            strokeWidth = 2.5.dp
+                                                        )
+                                                        Spacer(modifier = Modifier.height(10.dp))
+                                                        Text(
+                                                            text = stringResource(R.string.player_loading_ytm_data),
+                                                            fontSize = 12.sp,
+                                                            color = MaterialTheme.colorScheme.outline
                                                         )
                                                     }
                                                 }
@@ -1265,7 +1307,7 @@ fun MainAppScreen(
                                         }
 
                                         // Section 4: Infinite Discovery Feed
-                                        if (combinedDiscovery.isNotEmpty()) {
+                                        if (combinedDiscovery.isNotEmpty() || (isLoadingMoreDiscovery && currentMoodPool.isNotEmpty())) {
                                             item {
                                                 Spacer(modifier = Modifier.height(8.dp))
                                                 Text(

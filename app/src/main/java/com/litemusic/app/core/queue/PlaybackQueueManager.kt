@@ -315,14 +315,26 @@ class PlaybackQueueManager private constructor() {
     }
 
     /**
+     * Checks if there are any songs waiting in the manual or auto queue.
+     */
+    fun hasUpcoming(): Boolean = _queueState.value.totalUpcomingCount > 0
+
+    /**
      * Shuffles the manual upcoming queue.
      */
     fun shuffleManualQueue() {
+        setShuffled(true)
+    }
+
+    /**
+     * Sets whether shuffle mode is enabled. If enabled, shuffles manual queue.
+     */
+    fun setShuffled(shuffled: Boolean) {
         _queueState.update { current ->
-            if (current.manualQueue.isNotEmpty()) {
+            if (shuffled && current.manualQueue.isNotEmpty()) {
                 current.copy(manualQueue = current.manualQueue.shuffled(), isShuffled = true)
             } else {
-                current
+                current.copy(isShuffled = shuffled)
             }
         }
     }

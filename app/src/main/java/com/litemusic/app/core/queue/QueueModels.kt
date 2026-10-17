@@ -47,6 +47,9 @@ data class QueueState(
     val totalUpcomingCount: Int
         get() = allUpcoming.size
 
+    val hasUpcoming: Boolean
+        get() = totalUpcomingCount > 0
+
     val totalDurationSeconds: Long
         get() = allUpcoming.sumOf { it.song.durationSeconds }
 

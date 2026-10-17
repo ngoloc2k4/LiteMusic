@@ -1361,37 +1361,42 @@ fun MainAppScreen(
                                 enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.5f),
                                 exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.5f),
                                 modifier = Modifier
-                                    .align(Alignment.TopCenter)
+                                    .fillMaxWidth()
                                     .offset(y = indicatorOffsetDp.dp)
                             ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
-                                    shadowElevation = 8.dp,
-                                    modifier = Modifier.size(42.dp)
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentAlignment = Alignment.Center
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                                        shadowElevation = 8.dp,
+                                        modifier = Modifier.size(42.dp)
                                     ) {
-                                        if (isRefreshingHome) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(22.dp),
-                                                strokeWidth = 2.5.dp,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                        } else {
-                                            val progressFraction = (homePullOffset / homePullThreshold).coerceIn(0f, 1f)
-                                            val rotation = progressFraction * 180f
-                                            Icon(
-                                                imageVector = Icons.Default.ArrowDownward,
-                                                contentDescription = null,
-                                                tint = if (homePullOffset >= homePullThreshold) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                                modifier = Modifier
-                                                    .size(20.dp)
-                                                    .graphicsLayer { rotationZ = rotation }
-                                            )
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (isRefreshingHome) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(22.dp),
+                                                    strokeWidth = 2.5.dp,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            } else {
+                                                val progressFraction = (homePullOffset / homePullThreshold).coerceIn(0f, 1f)
+                                                val rotation = progressFraction * 180f
+                                                Icon(
+                                                    imageVector = Icons.Default.ArrowDownward,
+                                                    contentDescription = null,
+                                                    tint = if (homePullOffset >= homePullThreshold) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                                    modifier = Modifier
+                                                        .size(20.dp)
+                                                        .graphicsLayer { rotationZ = rotation }
+                                                )
+                                            }
                                         }
                                     }
                                 }

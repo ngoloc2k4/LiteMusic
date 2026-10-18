@@ -72,7 +72,6 @@ import com.litemusic.app.ui.settings.SettingsScreen
 import com.litemusic.app.ui.components.HomeSkeletonLoading
 import com.litemusic.app.ui.components.QuickPicksSkeletonSection
 import com.litemusic.app.core.i18n.CountryHelper
-import com.litemusic.app.core.network.AnonymousSessionManager
 import com.litemusic.app.ui.theme.*
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.BorderStroke
@@ -2181,6 +2180,12 @@ fun AlbumGridCard(
     }
 }
 
+private fun formatDuration(seconds: Int): String {
+    val m = seconds / 60
+    val s = seconds % 60
+    return String.format("%d:%02d", m, s)
+}
+
 @Composable
 fun QuickPickSongRow(
     song: Song,
@@ -2307,7 +2312,7 @@ fun QuickPickSongRow(
                 onDismissRequest = { showMenu = false }
             ) {
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.action_play)) },
+                    text = { Text(stringResource(R.string.action_play_now)) },
                     leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
                     onClick = {
                         showMenu = false
@@ -2323,7 +2328,7 @@ fun QuickPickSongRow(
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.player_favorite)) },
+                    text = { Text(stringResource(R.string.action_favorite)) },
                     leadingIcon = { Icon(Icons.Default.FavoriteBorder, contentDescription = null) },
                     onClick = {
                         showMenu = false

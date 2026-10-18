@@ -913,7 +913,6 @@ fun QueueEntryCard(
         }
     }
 }
-}
 
 @Composable
 fun FixedQueueMiniPlayer(

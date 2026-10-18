@@ -2180,7 +2180,7 @@ fun AlbumGridCard(
     }
 }
 
-private fun formatDuration(seconds: Int): String {
+private fun formatDuration(seconds: Long): String {
     val m = seconds / 60
     val s = seconds % 60
     return String.format("%d:%02d", m, s)

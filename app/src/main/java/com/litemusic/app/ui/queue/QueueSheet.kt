@@ -1,10 +1,7 @@
 package com.litemusic.app.ui.queue
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -45,8 +42,14 @@ import com.litemusic.app.core.queue.QueueItemActions
 import com.litemusic.app.core.queue.QueueSource
 import com.litemusic.app.core.queue.QueueState
 import com.litemusic.app.getEffectiveArtworkUrl
+import com.litemusic.app.ui.components.SourceBadge
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+
+private const val QUEUE_DRAG_THRESHOLD_PX = 80f
+private const val QUEUE_DRAG_MAX_OFFSET_PX = 120
+private const val QUEUE_DISMISS_ANIM_DURATION_MS = 220
 
 @Composable
 fun QueueSource.displayName(): String = when (this) {
@@ -71,7 +74,9 @@ fun QueueSheet(
     onRefreshAutoQueue: () -> Unit,
     onOpenFullPlayer: () -> Unit,
     repeatMode: Int = Player.REPEAT_MODE_OFF,
-    onToggleRepeat: () -> Unit = {}
+    onToggleRepeat: () -> Unit = {},
+    isShuffleEnabled: Boolean = false,
+    onToggleShuffle: () -> Unit = {}
 ) {
     AnimatedVisibility(
         visible = isOpen,
@@ -83,6 +88,20 @@ fun QueueSheet(
         val queueState by queueManager.queueState.collectAsState()
         val scope = rememberCoroutineScope()
         val snackbarHostState = remember { SnackbarHostState() }
+
+        val deleteWithUndo: (QueueEntry) -> Unit = { entry ->
+            queueManager.removeEntry(entry.queueEntryId)
+            scope.launch {
+                val res = snackbarHostState.showSnackbar(
+                    message = context.getString(R.string.queue_removed_msg, entry.song.title),
+                    actionLabel = context.getString(R.string.queue_undo),
+                    duration = SnackbarDuration.Short
+                )
+                if (res == SnackbarResult.ActionPerformed) {
+                    queueManager.undo()
+                }
+            }
+        }
 
         var showSavePlaylistDialog by remember { mutableStateOf(false) }
         var playlistNameInput by remember { mutableStateOf("") }
@@ -169,16 +188,11 @@ fun QueueSheet(
                                 }
 
                                 // Shuffle Queue
-                                IconButton(onClick = {
-                                    queueManager.shuffleManualQueue()
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar(context.getString(R.string.toast_queue_shuffled))
-                                    }
-                                }) {
+                                IconButton(onClick = onToggleShuffle) {
                                     Icon(
                                         imageVector = Icons.Default.Shuffle,
                                         contentDescription = stringResource(R.string.action_shuffle),
-                                        tint = if (queueState.isShuffled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        tint = if (isShuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
 
@@ -417,17 +431,7 @@ fun QueueSheet(
                                             queueManager.moveDown(entry.queueEntryId)
                                         },
                                         onDelete = {
-                                            queueManager.removeEntry(entry.queueEntryId)
-                                            scope.launch {
-                                                val res = snackbarHostState.showSnackbar(
-                                                    message = context.getString(R.string.queue_removed_msg, entry.song.title),
-                                                    actionLabel = context.getString(R.string.queue_undo),
-                                                    duration = SnackbarDuration.Short
-                                                )
-                                                if (res == SnackbarResult.ActionPerformed) {
-                                                    queueManager.undo()
-                                                }
-                                            }
+                                            deleteWithUndo(entry)
                                         }
                                     )
                                 }
@@ -502,8 +506,8 @@ fun QueueSheet(
                             itemsIndexed(
                                 items = queueState.autoQueue,
                                 key = { _, entry -> entry.queueEntryId }
-                            ) { _, entry ->
-                                val actions = remember(entry.queueEntryId) {
+                            ) { autoIdx, entry ->
+                                val actions = remember(entry.queueEntryId, autoIdx) {
                                     QueueItemActions(
                                         onPlay = {
                                             queueManager.removeEntry(entry.queueEntryId)
@@ -513,18 +517,14 @@ fun QueueSheet(
                                             queueManager.removeEntry(entry.queueEntryId)
                                             queueManager.playNext(entry.song)
                                         },
+                                        onMoveUp = {
+                                            queueManager.moveAutoUp(entry.queueEntryId)
+                                        },
+                                        onMoveDown = {
+                                            queueManager.moveAutoDown(entry.queueEntryId)
+                                        },
                                         onDelete = {
-                                            queueManager.removeEntry(entry.queueEntryId)
-                                            scope.launch {
-                                                val res = snackbarHostState.showSnackbar(
-                                                    message = context.getString(R.string.queue_removed_msg, entry.song.title),
-                                                    actionLabel = context.getString(R.string.queue_undo),
-                                                    duration = SnackbarDuration.Short
-                                                )
-                                                if (res == SnackbarResult.ActionPerformed) {
-                                                    queueManager.undo()
-                                                }
-                                            }
+                                            deleteWithUndo(entry)
                                         },
                                         onPromoteToManual = {
                                             queueManager.promoteToManualQueue(entry.queueEntryId)
@@ -540,8 +540,8 @@ fun QueueSheet(
                                     index = null,
                                     entry = entry,
                                     isManual = false,
-                                    canMoveUp = false,
-                                    canMoveDown = false,
+                                    canMoveUp = autoIdx > 0,
+                                    canMoveDown = autoIdx < queueState.autoQueue.lastIndex,
                                     actions = actions
                                 )
                             }
@@ -657,84 +657,98 @@ fun QueueEntryCard(
     canMoveDown: Boolean,
     actions: QueueItemActions
 ) {
+    var isDismissed by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
 
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.EndToStart || value == SwipeToDismissBoxValue.StartToEnd) {
-                actions.onDelete()
+            if (value == SwipeToDismissBoxValue.EndToStart) {
+                isDismissed = true
                 true
             } else false
         }
     )
 
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = true,
-        backgroundContent = {
-            val isDismissing = dismissState.targetValue != SwipeToDismissBoxValue.Settled
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (isDismissing) MaterialTheme.colorScheme.errorContainer else Color.Transparent)
-                    .padding(horizontal = 16.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                if (isDismissing) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = stringResource(R.string.action_delete),
-                        tint = MaterialTheme.colorScheme.onErrorContainer
-                    )
+    LaunchedEffect(isDismissed) {
+        if (isDismissed) {
+            delay(QUEUE_DISMISS_ANIM_DURATION_MS.toLong())
+            actions.onDelete()
+        }
+    }
+
+    AnimatedVisibility(
+        visible = !isDismissed,
+        exit = shrinkVertically(animationSpec = tween(durationMillis = QUEUE_DISMISS_ANIM_DURATION_MS)) + fadeOut()
+    ) {
+        SwipeToDismissBox(
+            state = dismissState,
+            enableDismissFromStartToEnd = false,
+            enableDismissFromEndToStart = true,
+            backgroundContent = {
+                val isDismissing = dismissState.targetValue != SwipeToDismissBoxValue.Settled
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isDismissing) MaterialTheme.colorScheme.errorContainer else Color.Transparent)
+                        .padding(horizontal = 16.dp),
+                    contentAlignment = Alignment.CenterEnd
+                ) {
+                    if (isDismissing) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = stringResource(R.string.action_delete),
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
                 }
             }
-        }
-    ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset { IntOffset(0, dragOffsetY.roundToInt().coerceIn(-120, 120)) }
-                .clip(RoundedCornerShape(12.dp))
-                .clickable { actions.onPlay() },
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
         ) {
-            Row(
+            Card(
                 modifier = Modifier
-                    .padding(horizontal = 8.dp, vertical = 7.dp)
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxWidth()
+                    .offset { IntOffset(0, dragOffsetY.roundToInt().coerceIn(-QUEUE_DRAG_MAX_OFFSET_PX, QUEUE_DRAG_MAX_OFFSET_PX)) }
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { actions.onPlay() },
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
             ) {
-                if (isManual) {
-                    // Touch Drag handle with vertical reorder gesture
-                    Icon(
-                        imageVector = Icons.Default.DragHandle,
-                        contentDescription = stringResource(R.string.queue_move_up),
-                        tint = if (dragOffsetY != 0f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                        modifier = Modifier
-                            .size(24.dp)
-                            .padding(end = 4.dp)
-                            .pointerInput(entry.queueEntryId, canMoveUp, canMoveDown) {
-                                detectVerticalDragGestures(
-                                    onDragEnd = { dragOffsetY = 0f },
-                                    onDragCancel = { dragOffsetY = 0f }
-                                ) { change, dragAmount ->
-                                    change.consume()
-                                    dragOffsetY += dragAmount
-                                    val threshold = 90f
-                                    if (dragOffsetY < -threshold && canMoveUp) {
-                                        actions.onMoveUp()
-                                        dragOffsetY = 0f
-                                    } else if (dragOffsetY > threshold && canMoveDown) {
-                                        actions.onMoveDown()
-                                        dragOffsetY = 0f
+                Row(
+                    modifier = Modifier
+                        .padding(horizontal = 8.dp, vertical = 7.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (canMoveUp || canMoveDown) {
+                        // Touch Drag handle with vertical reorder gesture
+                        Icon(
+                            imageVector = Icons.Default.DragHandle,
+                            contentDescription = stringResource(R.string.queue_move_up),
+                            tint = if (dragOffsetY != 0f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .size(24.dp)
+                                .padding(end = 4.dp)
+                                .pointerInput(entry.queueEntryId, canMoveUp, canMoveDown) {
+                                    detectVerticalDragGestures(
+                                        onDragEnd = { dragOffsetY = 0f },
+                                        onDragCancel = { dragOffsetY = 0f }
+                                    ) { change, dragAmount ->
+                                        change.consume()
+                                        dragOffsetY += dragAmount
+                                        if (dragOffsetY < -QUEUE_DRAG_THRESHOLD_PX && canMoveUp) {
+                                            actions.onMoveUp()
+                                            dragOffsetY = 0f
+                                        } else if (dragOffsetY > QUEUE_DRAG_THRESHOLD_PX && canMoveDown) {
+                                            actions.onMoveDown()
+                                            dragOffsetY = 0f
+                                        }
                                     }
                                 }
-                            }
-                    )
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
 
                     if (index != null) {
                         Text(
@@ -864,7 +878,7 @@ fun QueueEntryCard(
                                 actions.onPlayNext()
                             }
                         )
-                        if (isManual && canMoveUp) {
+                        if (canMoveUp) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.queue_move_up)) },
                                 leadingIcon = { Icon(Icons.Default.ArrowUpward, contentDescription = null) },
@@ -874,7 +888,7 @@ fun QueueEntryCard(
                                 }
                             )
                         }
-                        if (isManual && canMoveDown) {
+                        if (canMoveDown) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.queue_move_down)) },
                                 leadingIcon = { Icon(Icons.Default.ArrowDownward, contentDescription = null) },
@@ -898,6 +912,7 @@ fun QueueEntryCard(
             }
         }
     }
+}
 }
 
 @Composable
@@ -976,29 +991,5 @@ fun FixedQueueMiniPlayer(
                 )
             }
         }
-    }
-}
-
-@Composable
-fun SourceBadge(source: AudioSource) {
-    val (label, bg, fg) = when (source) {
-        AudioSource.YOUTUBE_MUSIC -> Triple("YT Music", Color(0xFFFF0000).copy(alpha = 0.15f), Color(0xFFFF4E4E))
-        AudioSource.YOUTUBE_VIDEO -> Triple("YouTube", Color(0xFFFF0000).copy(alpha = 0.15f), Color(0xFFFF4E4E))
-        AudioSource.SOUNDCLOUD -> Triple("SoundCloud", Color(0xFFFF5500).copy(alpha = 0.15f), Color(0xFFFF7700))
-        AudioSource.SPOTIFY -> Triple("Spotify", Color(0xFF1DB954).copy(alpha = 0.15f), Color(0xFF1ED760))
-        AudioSource.ALL -> Triple("All", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-
-    Surface(
-        shape = RoundedCornerShape(4.dp),
-        color = bg
-    ) {
-        Text(
-            text = label,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            color = fg,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-        )
     }
 }

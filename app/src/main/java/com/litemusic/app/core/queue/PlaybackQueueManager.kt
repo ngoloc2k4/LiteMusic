@@ -133,6 +133,46 @@ class PlaybackQueueManager private constructor() {
     }
 
     /**
+     * Moves an auto-suggested entry one position up.
+     */
+    fun moveAutoUp(queueEntryId: String): Boolean {
+        var changed = false
+        _queueState.update { current ->
+            val list = current.autoQueue.toMutableList()
+            val idx = list.indexOfFirst { it.queueEntryId == queueEntryId }
+            if (idx > 0) {
+                val item = list.removeAt(idx)
+                list.add(idx - 1, item)
+                changed = true
+                current.copy(autoQueue = list)
+            } else {
+                current
+            }
+        }
+        return changed
+    }
+
+    /**
+     * Moves an auto-suggested entry one position down.
+     */
+    fun moveAutoDown(queueEntryId: String): Boolean {
+        var changed = false
+        _queueState.update { current ->
+            val list = current.autoQueue.toMutableList()
+            val idx = list.indexOfFirst { it.queueEntryId == queueEntryId }
+            if (idx >= 0 && idx < list.lastIndex) {
+                val item = list.removeAt(idx)
+                list.add(idx + 1, item)
+                changed = true
+                current.copy(autoQueue = list)
+            } else {
+                current
+            }
+        }
+        return changed
+    }
+
+    /**
      * Removes an entry from either manual or auto queue.
      * Records the deletion into the undo stack.
      */
@@ -293,18 +333,29 @@ class PlaybackQueueManager private constructor() {
     /**
      * Retrieves and consumes the next song to play.
      * Takes from manual queue first; if manual queue is empty, takes from auto queue (if enabled).
+     * When repeatAll is true, recycles the played track to the end of the queue so it loops indefinitely.
      */
-    fun popNextSong(): Song? {
+    fun popNextSong(repeatAll: Boolean = false): Song? {
         var nextSong: Song? = null
         _queueState.update { current ->
             if (current.manualQueue.isNotEmpty()) {
                 val nextEntry = current.manualQueue.first()
                 nextSong = nextEntry.song
-                current.copy(manualQueue = current.manualQueue.drop(1), currentSong = nextSong)
+                val newManual = if (repeatAll) {
+                    current.manualQueue.drop(1) + nextEntry
+                } else {
+                    current.manualQueue.drop(1)
+                }
+                current.copy(manualQueue = newManual, currentSong = nextSong)
             } else if (current.isAutoQueueEnabled && current.autoQueue.isNotEmpty()) {
                 val nextEntry = current.autoQueue.first()
                 nextSong = nextEntry.song
-                current.copy(autoQueue = current.autoQueue.drop(1), currentSong = nextSong)
+                val newAuto = if (repeatAll) {
+                    current.autoQueue.drop(1) + nextEntry
+                } else {
+                    current.autoQueue.drop(1)
+                }
+                current.copy(autoQueue = newAuto, currentSong = nextSong)
             } else {
                 current
             }
@@ -335,6 +386,15 @@ class PlaybackQueueManager private constructor() {
                 current.copy(isShuffled = shuffled)
             }
         }
+    }
+
+    /**
+     * Toggles shuffle state on/off.
+     */
+    fun toggleShuffle(): Boolean {
+        val next = !_queueState.value.isShuffled
+        setShuffled(next)
+        return next
     }
 
 

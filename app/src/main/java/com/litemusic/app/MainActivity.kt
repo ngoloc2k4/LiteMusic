@@ -643,7 +643,7 @@ fun MainAppScreen(
     }
 
     fun playNextInQueue() {
-        val next = playbackQueueManager.popNextSong()
+        val next = playbackQueueManager.popNextSong(repeatAll = (repeatMode == Player.REPEAT_MODE_ALL))
         if (next != null) {
             playTrack(next, isVideoMode)
         } else {
@@ -1566,6 +1566,18 @@ fun MainAppScreen(
             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
         }
 
+        val toggleShuffleAction: () -> Unit = {
+            val next = !isShuffleEnabled
+            isShuffleEnabled = next
+            mediaController?.shuffleModeEnabled = next
+            playbackQueueManager.setShuffled(next)
+            if (next && playbackQueueManager.hasUpcoming()) {
+                Toast.makeText(context, context.getString(R.string.toast_queue_shuffled), Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, if (next) context.getString(R.string.player_shuffle_on) else context.getString(R.string.player_shuffle_off), Toast.LENGTH_SHORT).show()
+            }
+        }
+
         // Full Screen Player Sheet with Synced Lyrics & Queue
         AnimatedVisibility(
             visible = isPlayerSheetOpen,
@@ -1682,17 +1694,7 @@ fun MainAppScreen(
                 repeatMode = repeatMode,
                 onToggleRepeat = toggleRepeatAction,
                 isShuffleEnabled = isShuffleEnabled,
-                onToggleShuffle = {
-                    val next = !isShuffleEnabled
-                    isShuffleEnabled = next
-                    mediaController?.shuffleModeEnabled = next
-                    playbackQueueManager.setShuffled(next)
-                    if (next && playbackQueueManager.hasUpcoming()) {
-                        Toast.makeText(context, context.getString(R.string.toast_queue_shuffled), Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(context, if (next) context.getString(R.string.player_shuffle_on) else context.getString(R.string.player_shuffle_off), Toast.LENGTH_SHORT).show()
-                    }
-                },
+                onToggleShuffle = toggleShuffleAction,
                 availableVideoQualities = availableVideoQualities,
                 selectedVideoQuality = selectedVideoQuality,
                 onChangeVideoQuality = onChangeVideoQuality,
@@ -1720,6 +1722,8 @@ fun MainAppScreen(
                 onRefreshAutoQueue = refreshAutoQueueAction,
                 repeatMode = repeatMode,
                 onToggleRepeat = toggleRepeatAction,
+                isShuffleEnabled = isShuffleEnabled,
+                onToggleShuffle = toggleShuffleAction,
                 onOpenFullPlayer = {
                     isQueueSheetOpen = false
                     isPlayerSheetOpen = true

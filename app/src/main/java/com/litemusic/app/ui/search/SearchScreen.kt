@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.litemusic.app.core.model.AudioSource
 import com.litemusic.app.core.model.Song
 import com.litemusic.app.feature.aimusic.ui.AiSearchTile
+import com.litemusic.app.ui.components.SourceBadge
 
 data class SearchBrowseCategory(
     val title: String,
@@ -637,32 +638,6 @@ fun SearchSongCard(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun SourceBadge(source: AudioSource, modifier: Modifier = Modifier) {
-    val (icon, label, badgeColor) = when (source) {
-        AudioSource.YOUTUBE_MUSIC -> Triple("🎵", "Music", Color(0xFFEF4444))
-        AudioSource.YOUTUBE_VIDEO -> Triple("🎬", "Video", Color(0xFFF97316))
-        AudioSource.SOUNDCLOUD -> Triple("☁️", "SoundCloud", Color(0xFFFF5500))
-        AudioSource.SPOTIFY -> Triple("🟢", "Spotify", Color(0xFF1DB954))
-        AudioSource.ALL -> Triple("🌟", "All", Color(0xFF3B82F6))
-    }
-    Surface(
-        shape = RoundedCornerShape(5.dp),
-        color = badgeColor.copy(alpha = 0.12f),
-        border = BorderStroke(0.5.dp, badgeColor.copy(alpha = 0.35f)),
-        modifier = modifier
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(icon, fontSize = 8.5.sp)
-            Text(label, fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = badgeColor)
         }
     }
 }

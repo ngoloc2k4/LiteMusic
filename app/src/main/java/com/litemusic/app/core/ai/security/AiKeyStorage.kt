@@ -85,16 +85,20 @@ object AiKeyStorage {
         "llama3-8b-8192"
     )
 
+    fun sanitizeGroqModel(model: String): String {
+        return if (model.contains("/") || model.contains("qwen", ignoreCase = true) || !GROQ_VALID_MODELS.contains(model)) {
+            GROQ_DEFAULT_MODEL
+        } else {
+            model
+        }
+    }
+
     fun getSelectedModel(context: Context, providerId: String): String {
         return when (providerId) {
             "openrouter" -> getPrefs(context).getString(KEY_OPENROUTER_MODEL, "meta-llama/llama-3.1-8b-instruct:free") ?: "meta-llama/llama-3.1-8b-instruct:free"
             "groq" -> {
                 val saved = getPrefs(context).getString(KEY_GROQ_MODEL, GROQ_DEFAULT_MODEL) ?: GROQ_DEFAULT_MODEL
-                if (saved.contains("/") || saved.contains("qwen", ignoreCase = true) || !GROQ_VALID_MODELS.contains(saved)) {
-                    GROQ_DEFAULT_MODEL
-                } else {
-                    saved
-                }
+                sanitizeGroqModel(saved)
             }
             "custom_openai" -> getPrefs(context).getString(KEY_CUSTOM_OPENAI_MODEL, "gpt-4o-mini") ?: "gpt-4o-mini"
             else -> getPrefs(context).getString(KEY_GEMINI_MODEL, "gemini-2.5-flash") ?: "gemini-2.5-flash"
@@ -102,11 +106,7 @@ object AiKeyStorage {
     }
 
     fun setSelectedModel(context: Context, providerId: String, model: String) {
-        val sanitizedModel = if (providerId == "groq" && (model.contains("/") || model.contains("qwen", ignoreCase = true) || !GROQ_VALID_MODELS.contains(model))) {
-            GROQ_DEFAULT_MODEL
-        } else {
-            model
-        }
+        val sanitizedModel = if (providerId == "groq") sanitizeGroqModel(model) else model
         val key = when (providerId) {
             "openrouter" -> KEY_OPENROUTER_MODEL
             "groq" -> KEY_GROQ_MODEL

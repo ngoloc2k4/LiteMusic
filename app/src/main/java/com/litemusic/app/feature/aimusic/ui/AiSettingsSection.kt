@@ -102,11 +102,11 @@ fun AiSettingsSection(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 val providers = listOf(
-                    "groq" to "⚡ Groq (Llama 3.3 Free)",
-                    "gemini" to "✨ Gemini Free",
-                    "openrouter" to "🌐 OpenRouter",
-                    "custom_openai" to "⚙️ Custom OpenAI",
-                    "mock" to "📴 Offline"
+                    "groq" to "Groq (Llama 3.3 Free)",
+                    "gemini" to "Gemini Free",
+                    "openrouter" to "OpenRouter",
+                    "custom_openai" to "Custom OpenAI",
+                    "mock" to "Offline"
                 )
                 items(providers.size) { index ->
                     val (id, label) = providers[index]

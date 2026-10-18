@@ -126,7 +126,7 @@ fun LibraryScreen(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(bottom = 90.dp)
+                        contentPadding = PaddingValues(bottom = 115.dp)
                     ) {
                         // YouTube Music Playlist Hero Header
                         item {
@@ -225,7 +225,7 @@ fun LibraryScreen(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(bottom = 90.dp)
+                        contentPadding = PaddingValues(bottom = 115.dp)
                     ) {
                         item {
                             Column(
@@ -330,7 +330,7 @@ fun LibraryScreen(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 90.dp)
+                    contentPadding = PaddingValues(bottom = 115.dp)
                 ) {
                     item {
                         Row(

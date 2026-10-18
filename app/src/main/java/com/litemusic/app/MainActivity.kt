@@ -718,11 +718,6 @@ fun MainAppScreen(
                 try {
                     val trending = onSearch("Top Music Trending", AudioSource.YOUTUBE_MUSIC)
                     homeSongs = libraryManager.filterBlocked(trending)
-                    if (homeSongs.isNotEmpty()) {
-                        currentTitle = homeSongs.first().title
-                        currentArtist = homeSongs.first().artist
-                        currentArtwork = homeSongs.first().thumbnailUrl
-                    }
 
                     val history = libraryManager.getRecentlyPlayed()
                     if (history.isNotEmpty() && homeSongs.isNotEmpty()) {
@@ -1543,8 +1538,6 @@ fun MainAppScreen(
                     if (filtered.isNotEmpty()) {
                         playbackQueueManager.setAutoQueueSongs(filtered, QueueSource.RADIO)
                         Toast.makeText(context, context.getString(R.string.toast_queue_refreshed, filtered.size), Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(context, context.getString(R.string.toast_home_refreshing), Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -1704,7 +1697,23 @@ fun MainAppScreen(
         }
 
         // Dedicated Professional Queue Sheet (P0 Redesign)
-        if (isQueueSheetOpen) {
+        AnimatedVisibility(
+            visible = isQueueSheetOpen,
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = spring(
+                    dampingRatio = 0.82f,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            ),
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
+        ) {
             QueueSheet(
                 isOpen = isQueueSheetOpen,
                 onClose = { isQueueSheetOpen = false },
@@ -3793,7 +3802,7 @@ fun HomeSearchDialog(
                     ) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("✨ AI", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("AI", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                 }
                 Button(

@@ -78,12 +78,7 @@ fun QueueSheet(
     isShuffleEnabled: Boolean = false,
     onToggleShuffle: () -> Unit = {}
 ) {
-    AnimatedVisibility(
-        visible = isOpen,
-        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-    ) {
-        val context = LocalContext.current
+    val context = LocalContext.current
         val queueManager = remember { PlaybackQueueManager.getInstance() }
         val queueState by queueManager.queueState.collectAsState()
         val scope = rememberCoroutineScope()
@@ -118,7 +113,7 @@ fun QueueSheet(
                             hostState = snackbarHostState,
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(bottom = 76.dp)
+                                .padding(bottom = if (currentSong != null) 80.dp else 16.dp)
                         ) { data ->
                             Snackbar(
                                 snackbarData = data,
@@ -233,9 +228,13 @@ fun QueueSheet(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(innerPadding)
-                            .padding(bottom = 76.dp), // Extra room for bottom fixed mini player
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                            .padding(innerPadding),
+                        contentPadding = PaddingValues(
+                            start = 14.dp,
+                            end = 14.dp,
+                            top = 10.dp,
+                            bottom = if (currentSong != null) 96.dp else 16.dp
+                        ),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         // ================= SECTION 1: NOW PLAYING =================
@@ -759,7 +758,6 @@ fun QueueEntryCard(
                             modifier = Modifier.width(20.dp)
                         )
                     }
-                }
 
                 // Thumbnail
                 val effectiveArt = getEffectiveArtworkUrl(entry.song.thumbnailUrl, entry.song.sourceId, entry.song.id)
@@ -814,6 +812,8 @@ fun QueueEntryCard(
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                             )
                         }
+
+                        SourceBadge(source = entry.song.source)
                     }
                 }
 
@@ -912,6 +912,7 @@ fun QueueEntryCard(
             }
         }
     }
+}
 }
 
 @Composable

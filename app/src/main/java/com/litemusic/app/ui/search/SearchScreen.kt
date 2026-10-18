@@ -151,7 +151,7 @@ fun SearchScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(bottom = 90.dp)
+                contentPadding = PaddingValues(bottom = 115.dp)
             ) {
                 // Featured AI Search Card
                 item {
@@ -273,7 +273,7 @@ fun SearchScreen(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 90.dp)
+                    contentPadding = PaddingValues(bottom = 115.dp)
                 ) {
                     // Top Result Hero Card
                     val topResult = searchResults.first()

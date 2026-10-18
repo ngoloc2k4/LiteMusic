@@ -45,6 +45,8 @@
     <string name="mood_focus">Focus</string>
     <string name="mood_romance">Romance</string>
     <string name="mood_party">Party</string>
+    <string name="mood_sleep">Sleep</string>
+    <string name="mood_workout">Workout</string>
     <string name="search_hint">Search songs, artists, mood...</string>
     <string name="search_placeholder">Type song name or YouTube link...</string>
     <string name="quick_search">Quick Search</string>
@@ -240,6 +242,15 @@
     <string name="language_uk">Українська</string>
     <string name="language_sv">Svenska</string>
     <string name="home_section_quick_grid">Quick Picks</string>
+    <string name="home_action_play_all">Play all</string>
+    <string name="home_section_todays_hits">Today\'s Hits</string>
+    <string name="home_section_trending_songs">Trending songs for you</string>
+    <string name="home_section_music_videos">Music videos for you</string>
+    <string name="home_section_covers_remixes">Covers and remixes</string>
+    <string name="settings_country_title">Country &amp; Region</string>
+    <string name="settings_country_dialog_title">Select Country / Region</string>
+    <string name="settings_country_system">System Default</string>
+    <string name="settings_country_note">Trending charts, recommendations, and music feeds will be personalized for this country.</string>
     <string name="player_tap_to_open_queue_simple">Tap to open Queue</string>
     <string name="player_volume_standard">100% (Standard)</string>
     <string name="player_volume_max_dsp">300% (Max DSP)</string>

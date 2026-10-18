@@ -336,4 +336,13 @@
     <string name="queue_save_playlist_success">Đã lưu hàng đợi thành playlist: %1$s</string>
     <string name="queue_promoted_msg">Đã thêm \"%1$s\" vào hàng đợi của bạn</string>
     <string name="queue_sheet_title">Hàng đợi</string>
+
+    <!-- YouTube Music Player Redesign Strings -->
+    <string name="action_share">Chia sẻ</string>
+    <string name="player_audio_mode">Bài hát</string>
+    <string name="player_video_mode">Video</string>
+    <string name="player_up_next">TIẾP THEO</string>
+    <string name="player_playing_from">Đang phát từ %1$s</string>
+    <string name="player_add_to_playlist">Lưu vào danh sách phát</string>
+    <string name="player_play_next_action">Phát tiếp theo trong hàng đợi</string>
 </resources>

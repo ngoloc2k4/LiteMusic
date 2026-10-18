@@ -336,4 +336,13 @@
     <string name="queue_save_playlist_success">Saved queue as playlist: %1$s</string>
     <string name="queue_promoted_msg">Added \"%1$s\" to your queue</string>
     <string name="queue_sheet_title">Queue</string>
+
+    <!-- YouTube Music Player Redesign Strings -->
+    <string name="action_share">Share</string>
+    <string name="player_audio_mode">Song</string>
+    <string name="player_video_mode">Video</string>
+    <string name="player_up_next">UP NEXT</string>
+    <string name="player_playing_from">Playing from %1$s</string>
+    <string name="player_add_to_playlist">Save to playlist</string>
+    <string name="player_play_next_action">Play next in queue</string>
 </resources>

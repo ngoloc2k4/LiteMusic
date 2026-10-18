@@ -1,7 +1,7 @@
 package com.litemusic.app.ui.queue
 
 import androidx.compose.animation.*
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -102,8 +102,18 @@ fun QueueSheet(
         var playlistNameInput by remember { mutableStateOf("") }
         var showClearConfirmDialog by remember { mutableStateOf(false) }
 
+        var dragOffsetY by remember { mutableFloatStateOf(0f) }
+        val animatedDragOffsetY by animateFloatAsState(
+            targetValue = dragOffsetY,
+            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+            label = "queueSwipeDownOffset"
+        )
+        var accumulatedDragY by remember { mutableFloatStateOf(0f) }
+
         Surface(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .offset { IntOffset(0, animatedDragOffsetY.roundToInt()) },
             color = MaterialTheme.colorScheme.background
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -132,10 +142,33 @@ fun QueueSheet(
                                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
                                 .statusBarsPadding()
                         ) {
-                            // Top Drag Handle Indicator
+                            // Top Drag Handle Indicator with swipe down gesture
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .pointerInput(Unit) {
+                                        detectVerticalDragGestures(
+                                            onDragStart = { accumulatedDragY = 0f },
+                                            onVerticalDrag = { change, dragAmount ->
+                                                if (dragAmount > 0 || accumulatedDragY > 0) {
+                                                    change.consume()
+                                                    accumulatedDragY = (accumulatedDragY + dragAmount).coerceAtLeast(0f)
+                                                    dragOffsetY = accumulatedDragY
+                                                }
+                                            },
+                                            onDragEnd = {
+                                                if (dragOffsetY > 110f) {
+                                                    onClose()
+                                                }
+                                                dragOffsetY = 0f
+                                                accumulatedDragY = 0f
+                                            },
+                                            onDragCancel = {
+                                                dragOffsetY = 0f
+                                                accumulatedDragY = 0f
+                                            }
+                                        )
+                                    }
                                     .padding(top = 8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -148,10 +181,33 @@ fun QueueSheet(
                                 )
                             }
 
-                            // Top Header Row
+                            // Top Header Row with swipe down gesture
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .pointerInput(Unit) {
+                                        detectVerticalDragGestures(
+                                            onDragStart = { accumulatedDragY = 0f },
+                                            onVerticalDrag = { change, dragAmount ->
+                                                if (dragAmount > 0 || accumulatedDragY > 0) {
+                                                    change.consume()
+                                                    accumulatedDragY = (accumulatedDragY + dragAmount).coerceAtLeast(0f)
+                                                    dragOffsetY = accumulatedDragY
+                                                }
+                                            },
+                                            onDragEnd = {
+                                                if (dragOffsetY > 110f) {
+                                                    onClose()
+                                                }
+                                                dragOffsetY = 0f
+                                                accumulatedDragY = 0f
+                                            },
+                                            onDragCancel = {
+                                                dragOffsetY = 0f
+                                                accumulatedDragY = 0f
+                                            }
+                                        )
+                                    }
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {

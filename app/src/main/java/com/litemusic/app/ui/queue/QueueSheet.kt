@@ -644,7 +644,6 @@ fun QueueSheet(
             }
         }
     }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

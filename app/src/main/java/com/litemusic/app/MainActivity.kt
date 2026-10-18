@@ -1883,13 +1883,13 @@ fun MainAppScreen(
                 },
                 onAddNextToQueue = {
                     (activeSong ?: currentSong)?.let { song ->
-                        playbackQueueManager.addTrackNext(song)
+                        playbackQueueManager.playNext(song)
                         Toast.makeText(context, context.getString(R.string.queue_promoted_msg, song.title), Toast.LENGTH_SHORT).show()
                     }
                 },
                 onAddToQueue = {
                     (activeSong ?: currentSong)?.let { song ->
-                        playbackQueueManager.addTrack(song)
+                        playbackQueueManager.addToManualQueue(song)
                         Toast.makeText(context, context.getString(R.string.toast_added_to_queue, song.title), Toast.LENGTH_SHORT).show()
                     }
                 },

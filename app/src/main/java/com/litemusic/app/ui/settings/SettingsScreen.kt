@@ -8,6 +8,8 @@ import android.widget.Toast
 import androidx.compose.ui.res.stringResource
 import com.litemusic.app.R
 import com.litemusic.app.core.i18n.LocaleHelper
+import com.litemusic.app.core.i18n.CountryHelper
+import com.litemusic.app.core.network.AnonymousSessionManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -65,7 +67,9 @@ fun SettingsScreen(
     onInfiniteBatchSizeChange: (Int) -> Unit = {},
     isAutoQueueRelated: Boolean = true,
     onAutoQueueRelatedToggle: (Boolean) -> Unit = {},
-    onOpenBlocklist: () -> Unit = {}
+    onOpenBlocklist: () -> Unit = {},
+    currentCountry: String = "system",
+    onCountryChange: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val isGlass = currentThemeStyle == AppThemeStyle.LIQUID_GLASS
@@ -73,11 +77,15 @@ fun SettingsScreen(
     // Dialog States
     var showThemeDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showCountryDialog by remember { mutableStateOf(false) }
     var showCacheDialog by remember { mutableStateOf(false) }
     var showSkipDialog by remember { mutableStateOf(false) }
     var showInfiniteBatchDialog by remember { mutableStateOf(false) }
 
     var currentLanguage by remember { mutableStateOf(ThemePreferences.getAppLanguage(context)) }
+    var currentSelectedCountry by remember(currentCountry) {
+        mutableStateOf(if (currentCountry.isNotEmpty()) currentCountry else ThemePreferences.getAppCountry(context))
+    }
 
     // Cache metrics state
     var maxCacheMb by remember { mutableIntStateOf(AudioCacheManager.getMaxCacheSizeMb(context)) }
@@ -106,6 +114,19 @@ fun SettingsScreen(
                 (context as? Activity)?.recreate()
             },
             onDismiss = { showLanguageDialog = false }
+        )
+    }
+
+    if (showCountryDialog) {
+        CountrySelectionDialog(
+            currentCountry = currentSelectedCountry,
+            onSelectCountry = { newCountry ->
+                currentSelectedCountry = newCountry
+                ThemePreferences.setAppCountry(context, newCountry)
+                AnonymousSessionManager.getInstance().updateCountryCode(ThemePreferences.getEffectiveCountryCode(context))
+                onCountryChange(newCountry)
+            },
+            onDismiss = { showCountryDialog = false }
         )
     }
 
@@ -264,6 +285,29 @@ fun SettingsScreen(
                     title = stringResource(R.string.language),
                     subtitle = currentLanguageName,
                     onClick = { showLanguageDialog = true },
+                    trailingContent = {
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(18.dp))
+                    }
+                )
+
+                SettingsInsetDivider()
+
+                val currentCountryDisplay = remember(currentSelectedCountry) {
+                    if (currentSelectedCountry == CountryHelper.COUNTRY_SYSTEM) {
+                        "${context.getString(R.string.settings_country_system)} (${CountryHelper.getSystemCountryDisplay(context)})"
+                    } else {
+                        val opt = CountryHelper.getCountryOption(currentSelectedCountry)
+                        "${opt.flagEmoji} ${opt.displayName} (${opt.code})"
+                    }
+                }
+
+                SettingsRow(
+                    icon = Icons.Default.Public,
+                    iconBgColor = MaterialTheme.colorScheme.primaryContainer,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    title = stringResource(R.string.settings_country_title),
+                    subtitle = currentCountryDisplay,
+                    onClick = { showCountryDialog = true },
                     trailingContent = {
                         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(18.dp))
                     }
@@ -1172,4 +1216,89 @@ private fun LanguageSelectionDialog(
         }
     )
 }
+
+@Composable
+private fun CountrySelectionDialog(
+    currentCountry: String,
+    onSelectCountry: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val systemDisplay = CountryHelper.getSystemCountryDisplay(context)
+    val countries = listOf(
+        Triple(CountryHelper.COUNTRY_SYSTEM, stringResource(R.string.settings_country_system), systemDisplay)
+    ) + CountryHelper.POPULAR_COUNTRIES.map {
+        Triple(it.code, "${it.flagEmoji} ${it.displayName}", it.code)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.search_cancel), fontWeight = FontWeight.Bold)
+            }
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Default.Public, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.settings_country_dialog_title), fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            }
+        },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(R.string.settings_country_note),
+                    fontSize = 11.5.sp,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 380.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(countries) { (code, title, desc) ->
+                        val isSelected = currentCountry == code
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onSelectCountry(code)
+                                    onDismiss()
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = title,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                        fontSize = 14.sp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = desc,
+                                        fontSize = 11.sp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                                if (isSelected) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
 

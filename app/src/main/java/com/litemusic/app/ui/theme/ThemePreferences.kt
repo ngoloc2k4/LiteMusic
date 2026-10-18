@@ -89,5 +89,19 @@ object ThemePreferences {
     fun setAppLanguage(context: Context, language: String) {
         getPrefs(context).edit().putString(KEY_APP_LANGUAGE, language).apply()
     }
+
+    private const val KEY_APP_COUNTRY = "pref_app_country"
+
+    fun getAppCountry(context: Context): String {
+        return getPrefs(context).getString(KEY_APP_COUNTRY, "system") ?: "system"
+    }
+
+    fun setAppCountry(context: Context, countryCode: String) {
+        getPrefs(context).edit().putString(KEY_APP_COUNTRY, countryCode).apply()
+    }
+
+    fun getEffectiveCountryCode(context: Context): String {
+        return com.litemusic.app.core.i18n.CountryHelper.getEffectiveCountryCode(context)
+    }
 }
 

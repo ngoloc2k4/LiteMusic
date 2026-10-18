@@ -45,6 +45,8 @@
     <string name="mood_focus">Tập trung</string>
     <string name="mood_romance">Lãng mạn</string>
     <string name="mood_party">Tiệc tùng</string>
+    <string name="mood_sleep">Giấc ngủ</string>
+    <string name="mood_workout">Tập luyện</string>
     <string name="search_hint">Tìm bài hát, nghệ sĩ, tâm trạng...</string>
     <string name="search_placeholder">Nhập tên bài hát hoặc link YouTube...</string>
     <string name="quick_search">Tìm kiếm nhanh</string>
@@ -240,6 +242,15 @@
     <string name="language_uk">Українська (Ukraine)</string>
     <string name="language_sv">Svenska (Sweden)</string>
     <string name="home_section_quick_grid">Nghe nhanh</string>
+    <string name="home_action_play_all">Phát tất cả</string>
+    <string name="home_section_todays_hits">Bản hit hôm nay</string>
+    <string name="home_section_trending_songs">Bài hát thịnh hành</string>
+    <string name="home_section_music_videos">Video ca nhạc nổi bật</string>
+    <string name="home_section_covers_remixes">Bản Cover &amp; Remix</string>
+    <string name="settings_country_title">Quốc gia &amp; Khu vực</string>
+    <string name="settings_country_dialog_title">Chọn quốc gia / khu vực</string>
+    <string name="settings_country_system">Mặc định hệ thống</string>
+    <string name="settings_country_note">Bảng xếp hạng thịnh hành, đề xuất và nguồn cấp dữ liệu âm nhạc sẽ được cá nhân hóa theo quốc gia này.</string>
     <string name="player_tap_to_open_queue_simple">Chạm để mở Danh sách chờ</string>
     <string name="player_volume_standard">100% (Chuẩn)</string>
     <string name="player_volume_max_dsp">300% (Max DSP)</string>

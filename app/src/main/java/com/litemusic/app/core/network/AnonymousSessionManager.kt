@@ -34,6 +34,8 @@ class AnonymousSessionManager private constructor() {
     private var cachedVisitorData: String? = null
     @Volatile
     private var lastVisitorFetchMs: Long = 0L
+    @Volatile
+    var currentCountryCode: String = "VN"
 
     companion object {
         @Volatile
@@ -118,7 +120,7 @@ class AnonymousSessionManager private constructor() {
                 put("osVersion", "26.5.23O471")
                 put("userAgent", UA_VISION_OS)
                 put("hl", "vi")
-                put("gl", "VN")
+                put("gl", currentCountryCode)
                 put("timeZone", "Asia/Ho_Chi_Minh")
                 put("utcOffsetMinutes", 420)
                 if (!visitorData.isNullOrEmpty()) {
@@ -134,7 +136,7 @@ class AnonymousSessionManager private constructor() {
                 put("clientName", "WEB_REMIX")
                 put("clientVersion", "1.20241001.01.00")
                 put("hl", "vi")
-                put("gl", "VN")
+                put("gl", currentCountryCode)
                 put("utcOffsetMinutes", 420)
             })
         }
@@ -146,9 +148,15 @@ class AnonymousSessionManager private constructor() {
                 put("clientName", "WEB")
                 put("clientVersion", "2.20241001.01.00")
                 put("hl", "vi")
-                put("gl", "VN")
+                put("gl", currentCountryCode)
                 put("utcOffsetMinutes", 420)
             })
+        }
+    }
+
+    fun updateCountryCode(code: String) {
+        if (code.isNotBlank()) {
+            currentCountryCode = code.uppercase()
         }
     }
 }

@@ -1527,6 +1527,45 @@ fun MainAppScreen(
             }
         }
 
+        val refreshAutoQueueAction: () -> Unit = {
+            val base = activeSong ?: currentSong
+            if (base != null) {
+                coroutineScope.launch {
+                    val liveRelated = withContext(Dispatchers.IO) { onGetRelatedSongs?.invoke(base) ?: emptyList() }
+                    val candidatePool = (liveRelated + homeSongs + searchResults + libraryManager.getFavorites() + libraryManager.getRecentlyPlayed()).distinctBy { it.id }
+                    val newSongs = LocalHeuristicRanker.recommendRelatedSongs(
+                        baseSong = base,
+                        candidatePool = candidatePool,
+                        targetCount = 25,
+                        historySongs = libraryManager.getRecentlyPlayed()
+                    )
+                    val filtered = libraryManager.filterBlocked(newSongs).filterNot { it.id == base.id }
+                    if (filtered.isNotEmpty()) {
+                        playbackQueueManager.setAutoQueueSongs(filtered, QueueSource.RADIO)
+                        Toast.makeText(context, context.getString(R.string.toast_queue_refreshed, filtered.size), Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, context.getString(R.string.toast_home_refreshing), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+
+        val toggleRepeatAction: () -> Unit = {
+            val next = when (repeatMode) {
+                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                else -> Player.REPEAT_MODE_OFF
+            }
+            repeatMode = next
+            mediaController?.repeatMode = next
+            val msg = when (next) {
+                Player.REPEAT_MODE_ALL -> context.getString(R.string.player_repeat_all)
+                Player.REPEAT_MODE_ONE -> context.getString(R.string.player_repeat_one)
+                else -> context.getString(R.string.player_repeat_off)
+            }
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+        }
+
         // Full Screen Player Sheet with Synced Lyrics & Queue
         AnimatedVisibility(
             visible = isPlayerSheetOpen,
@@ -1623,28 +1662,7 @@ fun MainAppScreen(
                     playbackQueueManager.clearAllQueue()
                     Toast.makeText(context, context.getString(R.string.toast_queue_cleared), Toast.LENGTH_SHORT).show()
                 },
-                onRefreshQueue = {
-                    val base = activeSong ?: currentSong
-                    if (base != null) {
-                        coroutineScope.launch {
-                            val liveRelated = withContext(Dispatchers.IO) { onGetRelatedSongs?.invoke(base) ?: emptyList() }
-                            val candidatePool = (liveRelated + homeSongs + searchResults + libraryManager.getFavorites() + libraryManager.getRecentlyPlayed()).distinctBy { it.id }
-                            val newSongs = LocalHeuristicRanker.recommendRelatedSongs(
-                                baseSong = base,
-                                candidatePool = candidatePool,
-                                targetCount = 25,
-                                historySongs = libraryManager.getRecentlyPlayed()
-                            )
-                            val filtered = libraryManager.filterBlocked(newSongs).filterNot { it.id == base.id }
-                            if (filtered.isNotEmpty()) {
-                                playbackQueueManager.setAutoQueueSongs(filtered, QueueSource.RADIO)
-                                Toast.makeText(context, context.getString(R.string.toast_queue_refreshed, filtered.size), Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, context.getString(R.string.toast_home_refreshing), Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
-                },
+                onRefreshQueue = refreshAutoQueueAction,
                 onRecommendQueueAi = {
                     val cur = activeSong ?: currentSong
                     val prompt = if (cur != null) context.getString(R.string.player_ai_playlist_prompt, cur.title, cur.artist) else context.getString(R.string.home_section_curated_playlists)
@@ -1662,21 +1680,7 @@ fun MainAppScreen(
                 onSkipPrevious = { playPreviousInQueue() },
                 isLoading = isAudioLoading,
                 repeatMode = repeatMode,
-                onToggleRepeat = {
-                    val next = when (repeatMode) {
-                        Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
-                        Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                        else -> Player.REPEAT_MODE_OFF
-                    }
-                    repeatMode = next
-                    mediaController?.repeatMode = next
-                    val msg = when (next) {
-                        Player.REPEAT_MODE_ALL -> context.getString(R.string.player_repeat_all)
-                        Player.REPEAT_MODE_ONE -> context.getString(R.string.player_repeat_one)
-                        else -> context.getString(R.string.player_repeat_off)
-                    }
-                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                },
+                onToggleRepeat = toggleRepeatAction,
                 isShuffleEnabled = isShuffleEnabled,
                 onToggleShuffle = {
                     val next = !isShuffleEnabled
@@ -1713,28 +1717,9 @@ fun MainAppScreen(
                 onPlaySong = { song ->
                     playTrack(song, isVideoMode)
                 },
-                onRefreshAutoQueue = {
-                    val base = activeSong ?: currentSong
-                    if (base != null) {
-                        coroutineScope.launch {
-                            val liveRelated = withContext(Dispatchers.IO) { onGetRelatedSongs?.invoke(base) ?: emptyList() }
-                            val candidatePool = (liveRelated + homeSongs + searchResults + libraryManager.getFavorites() + libraryManager.getRecentlyPlayed()).distinctBy { it.id }
-                            val newSongs = LocalHeuristicRanker.recommendRelatedSongs(
-                                baseSong = base,
-                                candidatePool = candidatePool,
-                                targetCount = 25,
-                                historySongs = libraryManager.getRecentlyPlayed()
-                            )
-                            val filtered = libraryManager.filterBlocked(newSongs).filterNot { it.id == base.id }
-                            if (filtered.isNotEmpty()) {
-                                playbackQueueManager.setAutoQueueSongs(filtered, QueueSource.RADIO)
-                                Toast.makeText(context, context.getString(R.string.toast_queue_refreshed, filtered.size), Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, context.getString(R.string.toast_home_refreshing), Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
-                },
+                onRefreshAutoQueue = refreshAutoQueueAction,
+                repeatMode = repeatMode,
+                onToggleRepeat = toggleRepeatAction,
                 onOpenFullPlayer = {
                     isQueueSheetOpen = false
                     isPlayerSheetOpen = true

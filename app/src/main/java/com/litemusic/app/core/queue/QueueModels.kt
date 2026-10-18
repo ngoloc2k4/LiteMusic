@@ -80,3 +80,17 @@ sealed class QueueUndoAction {
         val autoBackup: List<QueueEntry>
     ) : QueueUndoAction()
 }
+
+/**
+ * UI Action bundle for a queue entry item.
+ * Eliminates parameter clumps across queue list rendering.
+ */
+data class QueueItemActions(
+    val onPlay: () -> Unit,
+    val onPlayNext: () -> Unit,
+    val onMoveUp: () -> Unit = {},
+    val onMoveDown: () -> Unit = {},
+    val onDelete: () -> Unit,
+    val onPromoteToManual: (() -> Unit)? = null
+)
+

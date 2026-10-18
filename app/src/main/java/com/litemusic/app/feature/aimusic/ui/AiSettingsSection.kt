@@ -44,10 +44,6 @@ fun AiSettingsSection(
     var customOpenAiUrl by remember { mutableStateOf(AiKeyStorage.getCustomOpenAiUrl(context)) }
     var autoFallback by remember { mutableStateOf(AiKeyStorage.isAutoFallbackLocal(context)) }
 
-    var isGroqKeyVisible by remember { mutableStateOf(false) }
-    var isGeminiKeyVisible by remember { mutableStateOf(false) }
-    var isOpenRouterKeyVisible by remember { mutableStateOf(false) }
-    var isCustomOpenAiKeyVisible by remember { mutableStateOf(false) }
 
     var cachedModels by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedModel by remember { mutableStateOf(AiKeyStorage.getSelectedModel(context, selectedProvider)) }
@@ -127,75 +123,41 @@ fun AiSettingsSection(
                 }
             }
 
-            // Provider Specific Fields
             when (selectedProvider) {
                 "groq" -> {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        OutlinedTextField(
+                        MaskedApiKeyTextField(
                             value = groqKey,
                             onValueChange = {
                                 groqKey = it
                                 AiKeyStorage.setGroqKey(context, it)
                             },
-                            label = { Text(stringResource(R.string.ai_settings_groq_label)) },
-                            placeholder = { Text("gsk_...") },
-                            singleLine = true,
-                            visualTransformation = if (isGroqKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            trailingIcon = {
-                                IconButton(onClick = { isGroqKeyVisible = !isGroqKeyVisible }) {
-                                    Icon(
-                                        imageVector = if (isGroqKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = if (isGroqKeyVisible) "Hide API key" else "Show API key"
-                                    )
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
+                            label = stringResource(R.string.ai_settings_groq_label),
+                            placeholder = "gsk_..."
                         )
                         Text(stringResource(R.string.ai_settings_groq_desc), fontSize = 11.sp, color = Color(0xFF10B981))
                     }
                 }
                 "gemini" -> {
-                    OutlinedTextField(
+                    MaskedApiKeyTextField(
                         value = geminiKey,
                         onValueChange = {
                             geminiKey = it
                             AiKeyStorage.setGeminiKey(context, it)
                         },
-                        label = { Text(stringResource(R.string.ai_settings_gemini_label)) },
-                        placeholder = { Text("AIzaSy...") },
-                        singleLine = true,
-                        visualTransformation = if (isGeminiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { isGeminiKeyVisible = !isGeminiKeyVisible }) {
-                                Icon(
-                                    imageVector = if (isGeminiKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (isGeminiKeyVisible) "Hide API key" else "Show API key"
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                        label = stringResource(R.string.ai_settings_gemini_label),
+                        placeholder = "AIzaSy..."
                     )
                 }
                 "openrouter" -> {
-                    OutlinedTextField(
+                    MaskedApiKeyTextField(
                         value = openRouterKey,
                         onValueChange = {
                             openRouterKey = it
                             AiKeyStorage.setOpenRouterKey(context, it)
                         },
-                        label = { Text(stringResource(R.string.ai_settings_openrouter_label)) },
-                        placeholder = { Text("sk-or-v1-...") },
-                        singleLine = true,
-                        visualTransformation = if (isOpenRouterKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { isOpenRouterKeyVisible = !isOpenRouterKeyVisible }) {
-                                Icon(
-                                    imageVector = if (isOpenRouterKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (isOpenRouterKeyVisible) "Hide API key" else "Show API key"
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                        label = stringResource(R.string.ai_settings_openrouter_label),
+                        placeholder = "sk-or-v1-..."
                     )
                 }
                 "custom_openai" -> {
@@ -211,25 +173,14 @@ fun AiSettingsSection(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        OutlinedTextField(
+                        MaskedApiKeyTextField(
                             value = customOpenAiKey,
                             onValueChange = {
                                 customOpenAiKey = it
                                 AiKeyStorage.setCustomOpenAiKey(context, it)
                             },
-                            label = { Text(stringResource(R.string.ai_settings_openai_key_label)) },
-                            placeholder = { Text("sk-...") },
-                            singleLine = true,
-                            visualTransformation = if (isCustomOpenAiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            trailingIcon = {
-                                IconButton(onClick = { isCustomOpenAiKeyVisible = !isCustomOpenAiKeyVisible }) {
-                                    Icon(
-                                        imageVector = if (isCustomOpenAiKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = if (isCustomOpenAiKeyVisible) "Hide API key" else "Show API key"
-                                    )
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
+                            label = stringResource(R.string.ai_settings_openai_key_label),
+                            placeholder = "sk-..."
                         )
                     }
                 }
@@ -324,3 +275,32 @@ fun AiSettingsSection(
         }
     }
 }
+
+@Composable
+private fun MaskedApiKeyTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    placeholder: String,
+    modifier: Modifier = Modifier
+) {
+    var isKeyVisible by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        placeholder = { Text(placeholder) },
+        singleLine = true,
+        visualTransformation = if (isKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = { isKeyVisible = !isKeyVisible }) {
+                Icon(
+                    imageVector = if (isKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                    contentDescription = if (isKeyVisible) "Hide API key" else "Show API key"
+                )
+            }
+        },
+        modifier = modifier.fillMaxWidth()
+    )
+}
+

@@ -1,7 +1,5 @@
 package com.litemusic.app.core.queue
 
-import android.content.Context
-import com.litemusic.app.core.library.LibraryManager
 import com.litemusic.app.core.model.Song
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -339,16 +337,7 @@ class PlaybackQueueManager private constructor() {
         }
     }
 
-    /**
-     * Saves all upcoming songs in the queue as a user playlist in LibraryManager.
-     */
-    fun saveQueueAsPlaylist(context: Context, playlistName: String): Boolean {
-        val songs = _queueState.value.allUpcoming.map { it.song }
-        if (songs.isEmpty()) return false
-        val lib = LibraryManager.getInstance(context)
-        lib.createPlaylist(playlistName, songs)
-        return true
-    }
+
 
     /**
      * Resets queue state completely (e.g. when user stops playback).

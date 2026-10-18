@@ -344,5 +344,7 @@
     <string name="player_up_next">TIẾP THEO</string>
     <string name="player_playing_from">Đang phát từ %1$s</string>
     <string name="player_add_to_playlist">Lưu vào danh sách phát</string>
+    <string name="player_play_next">Phát tiếp theo</string>
     <string name="player_play_next_action">Phát tiếp theo trong hàng đợi</string>
+    <string name="favorites_title">Yêu thích</string>
 </resources>

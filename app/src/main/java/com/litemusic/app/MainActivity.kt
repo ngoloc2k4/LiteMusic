@@ -3820,7 +3820,7 @@ fun M3FullScreenPlayer(
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "${String.format(Locale.US, \"%.2f\", playbackSpeed)}x",
+                                    text = String.format(Locale.US, "%.2fx", playbackSpeed),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface

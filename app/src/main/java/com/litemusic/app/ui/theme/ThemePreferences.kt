@@ -103,5 +103,15 @@ object ThemePreferences {
     fun getEffectiveCountryCode(context: Context): String {
         return com.litemusic.app.core.i18n.CountryHelper.getEffectiveCountryCode(context)
     }
+
+    private const val KEY_PREFERRED_VIDEO_QUALITY = "pref_preferred_video_quality"
+
+    fun getPreferredVideoQuality(context: Context): String {
+        return getPrefs(context).getString(KEY_PREFERRED_VIDEO_QUALITY, "720p") ?: "720p"
+    }
+
+    fun setPreferredVideoQuality(context: Context, qualityLabel: String) {
+        getPrefs(context).edit().putString(KEY_PREFERRED_VIDEO_QUALITY, qualityLabel).apply()
+    }
 }
 

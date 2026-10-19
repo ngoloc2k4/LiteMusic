@@ -78,6 +78,7 @@ import com.litemusic.app.ui.components.QuickPicksSkeletonSection
 import com.litemusic.app.core.i18n.CountryHelper
 import com.litemusic.app.ui.theme.*
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.viewinterop.AndroidView
@@ -89,6 +90,9 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import kotlin.math.roundToInt
 import kotlin.math.abs
 import com.litemusic.app.feature.aimusic.domain.AiGenerationState
@@ -152,6 +156,7 @@ class MainActivity : ComponentActivity() {
     private var playJob: Job? = null
     private var availableVideoQualities by mutableStateOf<List<VideoQuality>>(emptyList())
     private var selectedVideoQuality by mutableStateOf<VideoQuality?>(null)
+    private var currentMediaIsVideo by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -239,11 +244,13 @@ class MainActivity : ComponentActivity() {
                     availableVideoQualities = availableVideoQualities,
                     selectedVideoQuality = selectedVideoQuality,
                     onChangeVideoQuality = { quality ->
+                        ThemePreferences.setPreferredVideoQuality(this@MainActivity, quality.label)
                         val target = currentPlayingSong
                         if (target != null) {
                             playSong(target, asVideo = true, explicitQuality = quality)
                         }
                     },
+                    currentMediaIsVideo = currentMediaIsVideo,
                     currentCountry = appCountry,
                     onCountryChange = { appCountry = it }
                 )
@@ -408,7 +415,10 @@ class MainActivity : ComponentActivity() {
                 } else {
                     val qualities = ytResolver.resolveVideoQualities(song)
                     availableVideoQualities = qualities
-                    val chosen = qualities.firstOrNull()
+                    val savedPref = ThemePreferences.getPreferredVideoQuality(this@MainActivity)
+                    val chosen = qualities.firstOrNull { it.label.equals(savedPref, ignoreCase = true) }
+                        ?: qualities.firstOrNull { it.label.contains(savedPref, ignoreCase = true) }
+                        ?: qualities.firstOrNull()
                     selectedVideoQuality = chosen
                     if (chosen?.audioUrl != null) {
                         song.streamUrl = chosen.audioUrl
@@ -417,13 +427,28 @@ class MainActivity : ComponentActivity() {
                         ?: ytResolver.resolveStreamUrl(song))
                 }
             } else {
-                song.streamUrl ?: when (song.source) {
+                val audioUrl = song.streamUrl ?: when (song.source) {
                     AudioSource.ALL, AudioSource.YOUTUBE_MUSIC, AudioSource.YOUTUBE_VIDEO -> ytResolver.resolveStreamUrl(song)?.also { song.streamUrl = it }
                     AudioSource.SOUNDCLOUD -> scResolver.resolveStreamUrl(song)?.also { song.streamUrl = it }
                     AudioSource.SPOTIFY -> spotifyBridge.resolveTrackToPlayableStream(song)?.also { song.streamUrl = it }
                 }
+                // Pre-warm video qualities in background so switching to video mode later is instant!
+                if (isVideoSource) {
+                    launch(Dispatchers.IO) {
+                        try {
+                            val prewarmed = ytResolver.resolveVideoQualities(song)
+                            if (prewarmed.isNotEmpty()) {
+                                withContext(Dispatchers.Main) {
+                                    availableVideoQualities = prewarmed
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+                audioUrl
             }
 
+            currentMediaIsVideo = effectiveAsVideo
             isResolvingStream = false
 
             if (url != null) {
@@ -448,11 +473,12 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val mediaItem = mediaItemBuilder.build()
-                controller.setMediaItem(mediaItem)
-                controller.prepare()
                 if (isSameSong && curPos > 0) {
-                    controller.seekTo(curPos)
+                    controller.setMediaItem(mediaItem, curPos)
+                } else {
+                    controller.setMediaItem(mediaItem)
                 }
+                controller.prepare()
                 controller.play()
             } else {
                 controller.pause()
@@ -524,6 +550,7 @@ fun MainAppScreen(
     availableVideoQualities: List<VideoQuality> = emptyList(),
     selectedVideoQuality: VideoQuality? = null,
     onChangeVideoQuality: (VideoQuality) -> Unit = {},
+    currentMediaIsVideo: Boolean = false,
     onGetRelatedSongs: (suspend (Song) -> List<Song>)? = null,
     currentCountry: String = "system",
     onCountryChange: (String) -> Unit = {}
@@ -553,7 +580,7 @@ fun MainAppScreen(
     var isRefreshingHome by remember { mutableStateOf(false) }
     val homeLazyListState = rememberLazyListState()
     var homePullOffset by remember { mutableFloatStateOf(0f) }
-    val homePullThreshold = 130f
+    val homePullThreshold = 85f
 
     val homePullRefreshConnection = remember {
         object : NestedScrollConnection {
@@ -569,7 +596,7 @@ fun MainAppScreen(
 
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
                 if (available.y > 0 && homeLazyListState.firstVisibleItemIndex == 0 && homeLazyListState.firstVisibleItemScrollOffset == 0) {
-                    homePullOffset = (homePullOffset + available.y * 0.45f).coerceAtMost(220f)
+                    homePullOffset = (homePullOffset + available.y * 0.5f).coerceAtMost(160f)
                     return Offset(0f, available.y)
                 }
                 return Offset.Zero
@@ -795,6 +822,9 @@ fun MainAppScreen(
                 } catch (_: Exception) {}
                 isLoadingMood = false
             }
+        }
+        if (isRefresh) {
+            delay(650)
         }
         isRefreshingHome = false
     }
@@ -1512,12 +1542,12 @@ fun MainAppScreen(
                                 }
                             }
 
-                            // Floating circular pull-to-refresh popup badge
-                            val isIndicatorVisible = homePullOffset > 8f || isRefreshingHome
+                            // Floating circular pull-to-refresh popup badge with dynamic progress ring
+                            val isIndicatorVisible = homePullOffset > 6f || isRefreshingHome
                             val indicatorOffsetDp by animateFloatAsState(
                                 targetValue = when {
-                                    isRefreshingHome -> 60f
-                                    homePullOffset > 0f -> (10f + (homePullOffset * 0.42f)).coerceAtMost(75f)
+                                    isRefreshingHome -> 64f
+                                    homePullOffset > 0f -> (10f + (homePullOffset * 0.55f)).coerceAtMost(80f)
                                     else -> 0f
                                 },
                                 animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
@@ -1526,7 +1556,7 @@ fun MainAppScreen(
 
                             AnimatedVisibility(
                                 visible = isIndicatorVisible,
-                                enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.5f),
+                                enter = fadeIn(tween(140)) + scaleIn(initialScale = 0.5f),
                                 exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.5f),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1536,12 +1566,17 @@ fun MainAppScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     contentAlignment = Alignment.Center
                                 ) {
+                                    val progressFraction = (homePullOffset / homePullThreshold).coerceIn(0f, 1f)
+                                    val isReadyToTrigger = homePullOffset >= homePullThreshold
                                     Surface(
                                         shape = CircleShape,
-                                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
-                                        shadowElevation = 8.dp,
-                                        modifier = Modifier.size(42.dp)
+                                        color = if (isReadyToTrigger) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+                                        border = BorderStroke(
+                                            width = if (isReadyToTrigger) 1.5.dp else 1.dp,
+                                            color = if (isReadyToTrigger) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                        ),
+                                        shadowElevation = 10.dp,
+                                        modifier = Modifier.size(44.dp)
                                     ) {
                                         Box(
                                             modifier = Modifier.fillMaxSize(),
@@ -1549,20 +1584,28 @@ fun MainAppScreen(
                                         ) {
                                             if (isRefreshingHome) {
                                                 CircularProgressIndicator(
-                                                    modifier = Modifier.size(22.dp),
-                                                    strokeWidth = 2.5.dp,
+                                                    modifier = Modifier.size(24.dp),
+                                                    strokeWidth = 2.8.dp,
                                                     color = MaterialTheme.colorScheme.primary
                                                 )
                                             } else {
-                                                val progressFraction = (homePullOffset / homePullThreshold).coerceIn(0f, 1f)
+                                                CircularProgressIndicator(
+                                                    progress = { progressFraction },
+                                                    modifier = Modifier.size(30.dp),
+                                                    strokeWidth = 2.5.dp,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                                )
                                                 val rotation = progressFraction * 180f
                                                 Icon(
-                                                    imageVector = Icons.Default.ArrowDownward,
+                                                    imageVector = if (isReadyToTrigger) Icons.Default.Refresh else Icons.Default.ArrowDownward,
                                                     contentDescription = null,
-                                                    tint = if (homePullOffset >= homePullThreshold) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                                    tint = if (isReadyToTrigger) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                                                     modifier = Modifier
-                                                        .size(20.dp)
-                                                        .graphicsLayer { rotationZ = rotation }
+                                                        .size(17.dp)
+                                                        .graphicsLayer {
+                                                            if (!isReadyToTrigger) rotationZ = rotation
+                                                        }
                                                 )
                                             }
                                         }
@@ -1816,8 +1859,15 @@ fun MainAppScreen(
                         Toast.makeText(context, context.getString(R.string.player_video_yt_only), Toast.LENGTH_SHORT).show()
                     } else {
                         isVideoMode = enableVideo
-                        cur?.let { song ->
-                            onPlaySong(song, enableVideo)
+                        if (!enableVideo && currentMediaIsVideo) {
+                            // Seamless Song mode: Current stream already has audio running smoothly!
+                            // Only switch UI to album art with 0-latency and zero audio disruption!
+                        } else if (enableVideo && currentMediaIsVideo) {
+                            // Video stream is already active! Show video surface with 0-latency!
+                        } else {
+                            cur?.let { song ->
+                                onPlaySong(song, enableVideo)
+                            }
                         }
                     }
                 },
@@ -2854,6 +2904,35 @@ fun M3FullScreenPlayer(
     var showSaveToPlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistNameInput by remember { mutableStateOf("") }
 
+    val playerCoroutineScope = rememberCoroutineScope()
+    val mediaSwipeOffsetX = remember { Animatable(0f) }
+    var isSwipingMedia by remember { mutableStateOf(false) }
+
+    fun animatedSkipNext() {
+        playerCoroutineScope.launch {
+            mediaSwipeOffsetX.animateTo(-750f, tween(160, easing = FastOutLinearInEasing))
+            onSkipNext()
+            mediaSwipeOffsetX.snapTo(750f)
+            mediaSwipeOffsetX.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow))
+        }
+    }
+
+    fun animatedSkipPrevious() {
+        playerCoroutineScope.launch {
+            mediaSwipeOffsetX.animateTo(750f, tween(160, easing = FastOutLinearInEasing))
+            onSkipPrevious()
+            mediaSwipeOffsetX.snapTo(-750f)
+            mediaSwipeOffsetX.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow))
+        }
+    }
+
+    var peekDragUpOffset by remember { mutableFloatStateOf(0f) }
+    val animatedPeekOffset by animateFloatAsState(
+        targetValue = peekDragUpOffset,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "peekDragUp"
+    )
+
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     val animatedDragOffsetY by animateFloatAsState(
         targetValue = dragOffsetY,
@@ -3467,12 +3546,50 @@ fun M3FullScreenPlayer(
                     }
                 }
 
-                // Middle: Large Square Artwork (16dp rounded corners) or 16:9 Video
+                // Middle: Large Square Artwork (16dp rounded corners) or 16:9 Video with horizontal swipe next/previous gesture
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .padding(vertical = 10.dp),
+                        .padding(vertical = 10.dp)
+                        .graphicsLayer {
+                            translationX = mediaSwipeOffsetX.value
+                            val dragDistance = abs(mediaSwipeOffsetX.value)
+                            val progress = (dragDistance / 500f).coerceIn(0f, 1f)
+                            alpha = 1f - progress * 0.4f
+                            scaleX = 1f - progress * 0.08f
+                            scaleY = 1f - progress * 0.08f
+                        }
+                        .pointerInput(Unit) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { isSwipingMedia = true },
+                                onHorizontalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    playerCoroutineScope.launch {
+                                        mediaSwipeOffsetX.snapTo(mediaSwipeOffsetX.value + dragAmount)
+                                    }
+                                },
+                                onDragEnd = {
+                                    isSwipingMedia = false
+                                    val currentVal = mediaSwipeOffsetX.value
+                                    if (currentVal < -80f) {
+                                        animatedSkipNext()
+                                    } else if (currentVal > 80f) {
+                                        animatedSkipPrevious()
+                                    } else {
+                                        playerCoroutineScope.launch {
+                                            mediaSwipeOffsetX.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
+                                        }
+                                    }
+                                },
+                                onDragCancel = {
+                                    isSwipingMedia = false
+                                    playerCoroutineScope.launch {
+                                        mediaSwipeOffsetX.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
+                                    }
+                                }
+                            )
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     if (isVideoMode) {
@@ -3928,7 +4045,7 @@ fun M3FullScreenPlayer(
                         )
                     }
 
-                    IconButton(onClick = onSkipPrevious) {
+                    IconButton(onClick = { animatedSkipPrevious() }) {
                         Icon(
                             imageVector = Icons.Default.SkipPrevious,
                             contentDescription = "Previous",
@@ -3963,7 +4080,7 @@ fun M3FullScreenPlayer(
                         }
                     }
 
-                    IconButton(onClick = onSkipNext) {
+                    IconButton(onClick = { animatedSkipNext() }) {
                         Icon(
                             imageVector = Icons.Default.SkipNext,
                             contentDescription = "Next",
@@ -3984,11 +4101,32 @@ fun M3FullScreenPlayer(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Signature YouTube Music Up Next Peek Drawer
+                // Signature YouTube Music Up Next Peek Drawer with interactive swipe-up gesture
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .offset { IntOffset(0, animatedPeekOffset.roundToInt()) }
                         .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                        .pointerInput(Unit) {
+                            detectVerticalDragGestures(
+                                onDragStart = { peekDragUpOffset = 0f },
+                                onVerticalDrag = { change, dragAmount ->
+                                    if (dragAmount < 0 || peekDragUpOffset < 0f) {
+                                        change.consume()
+                                        peekDragUpOffset = (peekDragUpOffset + dragAmount).coerceIn(-120f, 0f)
+                                    }
+                                },
+                                onDragEnd = {
+                                    if (peekDragUpOffset < -25f) {
+                                        onOpenQueue()
+                                    }
+                                    peekDragUpOffset = 0f
+                                },
+                                onDragCancel = {
+                                    peekDragUpOffset = 0f
+                                }
+                            )
+                        }
                         .clickable { onOpenQueue() },
                     shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh

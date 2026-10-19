@@ -9,6 +9,12 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -109,6 +115,40 @@ fun QueueSheet(
             label = "queueSwipeDownOffset"
         )
         var accumulatedDragY by remember { mutableFloatStateOf(0f) }
+        val queueLazyListState = rememberLazyListState()
+
+        val queueDismissNestedScroll = remember {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    if (dragOffsetY > 0 && available.y < 0) {
+                        val newOffset = (dragOffsetY + available.y).coerceAtLeast(0f)
+                        val consumed = newOffset - dragOffsetY
+                        dragOffsetY = newOffset
+                        accumulatedDragY = newOffset
+                        return Offset(0f, consumed)
+                    }
+                    return Offset.Zero
+                }
+
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                    if (available.y > 0 && queueLazyListState.firstVisibleItemIndex == 0 && queueLazyListState.firstVisibleItemScrollOffset == 0) {
+                        accumulatedDragY = (accumulatedDragY + available.y * 0.7f).coerceAtLeast(0f)
+                        dragOffsetY = accumulatedDragY
+                        return Offset(0f, available.y)
+                    }
+                    return Offset.Zero
+                }
+
+                override suspend fun onPreFling(available: Velocity): Velocity {
+                    if (dragOffsetY > 90f || available.y > 700f) {
+                        onClose()
+                    }
+                    dragOffsetY = 0f
+                    accumulatedDragY = 0f
+                    return Velocity.Zero
+                }
+            }
+        }
 
         Surface(
             modifier = Modifier
@@ -141,34 +181,34 @@ fun QueueSheet(
                                 .fillMaxWidth()
                                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
                                 .statusBarsPadding()
+                                .pointerInput(Unit) {
+                                    detectVerticalDragGestures(
+                                        onDragStart = { accumulatedDragY = 0f },
+                                        onVerticalDrag = { change, dragAmount ->
+                                            if (dragAmount > 0 || accumulatedDragY > 0) {
+                                                change.consume()
+                                                accumulatedDragY = (accumulatedDragY + dragAmount).coerceAtLeast(0f)
+                                                dragOffsetY = accumulatedDragY
+                                            }
+                                        },
+                                        onDragEnd = {
+                                            if (dragOffsetY > 90f) {
+                                                onClose()
+                                            }
+                                            dragOffsetY = 0f
+                                            accumulatedDragY = 0f
+                                        },
+                                        onDragCancel = {
+                                            dragOffsetY = 0f
+                                            accumulatedDragY = 0f
+                                        }
+                                    )
+                                }
                         ) {
-                            // Top Drag Handle Indicator with swipe down gesture
+                            // Top Drag Handle Indicator
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .pointerInput(Unit) {
-                                        detectVerticalDragGestures(
-                                            onDragStart = { accumulatedDragY = 0f },
-                                            onVerticalDrag = { change, dragAmount ->
-                                                if (dragAmount > 0 || accumulatedDragY > 0) {
-                                                    change.consume()
-                                                    accumulatedDragY = (accumulatedDragY + dragAmount).coerceAtLeast(0f)
-                                                    dragOffsetY = accumulatedDragY
-                                                }
-                                            },
-                                            onDragEnd = {
-                                                if (dragOffsetY > 110f) {
-                                                    onClose()
-                                                }
-                                                dragOffsetY = 0f
-                                                accumulatedDragY = 0f
-                                            },
-                                            onDragCancel = {
-                                                dragOffsetY = 0f
-                                                accumulatedDragY = 0f
-                                            }
-                                        )
-                                    }
                                     .padding(top = 8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -181,33 +221,10 @@ fun QueueSheet(
                                 )
                             }
 
-                            // Top Header Row with swipe down gesture
+                            // Top Header Row
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .pointerInput(Unit) {
-                                        detectVerticalDragGestures(
-                                            onDragStart = { accumulatedDragY = 0f },
-                                            onVerticalDrag = { change, dragAmount ->
-                                                if (dragAmount > 0 || accumulatedDragY > 0) {
-                                                    change.consume()
-                                                    accumulatedDragY = (accumulatedDragY + dragAmount).coerceAtLeast(0f)
-                                                    dragOffsetY = accumulatedDragY
-                                                }
-                                            },
-                                            onDragEnd = {
-                                                if (dragOffsetY > 110f) {
-                                                    onClose()
-                                                }
-                                                dragOffsetY = 0f
-                                                accumulatedDragY = 0f
-                                            },
-                                            onDragCancel = {
-                                                dragOffsetY = 0f
-                                                accumulatedDragY = 0f
-                                            }
-                                        )
-                                    }
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -282,8 +299,10 @@ fun QueueSheet(
                     }
                 ) { innerPadding ->
                     LazyColumn(
+                        state = queueLazyListState,
                         modifier = Modifier
                             .fillMaxSize()
+                            .nestedScroll(queueDismissNestedScroll)
                             .padding(innerPadding),
                         contentPadding = PaddingValues(
                             start = 14.dp,

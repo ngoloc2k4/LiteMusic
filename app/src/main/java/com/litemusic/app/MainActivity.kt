@@ -1609,7 +1609,6 @@ fun MainAppScreen(
                                 enter = fadeIn(tween(140)) + scaleIn(initialScale = 0.5f),
                                 exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.5f),
                                 modifier = Modifier
-                                    .align(Alignment.TopCenter)
                                     .zIndex(100f)
                                     .fillMaxWidth()
                                     .offset(y = indicatorOffsetDp.dp)

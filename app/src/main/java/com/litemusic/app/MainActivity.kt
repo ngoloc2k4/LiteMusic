@@ -40,6 +40,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -585,25 +586,46 @@ fun MainAppScreen(
     val homePullRefreshConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (homePullOffset > 0 && available.y < 0) {
-                    val newOffset = (homePullOffset + available.y).coerceAtLeast(0f)
-                    val consumed = newOffset - homePullOffset
-                    homePullOffset = newOffset
-                    return Offset(0f, consumed)
+                if (!isRefreshingHome) {
+                    // Pulling downward at the top of the list: intercept in onPreScroll before overscroll consumes it
+                    if (available.y > 0 && !homeLazyListState.canScrollBackward) {
+                        val prev = homePullOffset
+                        homePullOffset = (homePullOffset + available.y * 0.5f).coerceAtMost(160f)
+                        val consumed = (homePullOffset - prev) / 0.5f
+                        return Offset(0f, consumed)
+                    }
+                    // Pushing upward while pull offset is active: consume delta to reduce offset
+                    if (available.y < 0 && homePullOffset > 0f) {
+                        val prev = homePullOffset
+                        homePullOffset = (homePullOffset + available.y * 0.5f).coerceAtLeast(0f)
+                        val consumed = (homePullOffset - prev) / 0.5f
+                        return Offset(0f, consumed)
+                    }
                 }
                 return Offset.Zero
             }
 
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                if (available.y > 0 && homeLazyListState.firstVisibleItemIndex == 0 && homeLazyListState.firstVisibleItemScrollOffset == 0) {
+                if (!isRefreshingHome && available.y > 0 && !homeLazyListState.canScrollBackward) {
+                    val prev = homePullOffset
                     homePullOffset = (homePullOffset + available.y * 0.5f).coerceAtMost(160f)
-                    return Offset(0f, available.y)
+                    val consumedOffset = (homePullOffset - prev) / 0.5f
+                    return Offset(0f, consumedOffset)
                 }
                 return Offset.Zero
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (homePullOffset >= homePullThreshold) {
+                if (!isRefreshingHome && homePullOffset >= homePullThreshold) {
+                    isRefreshingHome = true
+                    refreshHomeTrigger++
+                }
+                homePullOffset = 0f
+                return Velocity.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                if (!isRefreshingHome && homePullOffset >= homePullThreshold) {
                     isRefreshingHome = true
                     refreshHomeTrigger++
                 }
@@ -762,6 +784,7 @@ fun MainAppScreen(
     // Unified Home & Mood Data Fetching (eliminates race conditions and concurrent overwrites)
     LaunchedEffect(selectedMoodFilter, refreshHomeTrigger, homeCountryCode) {
         val isRefresh = refreshHomeTrigger > 0
+        val refreshStartTime = System.currentTimeMillis()
         if (isRefresh) {
             isRefreshingHome = true
         }
@@ -824,7 +847,10 @@ fun MainAppScreen(
             }
         }
         if (isRefresh) {
-            delay(650)
+            val elapsed = System.currentTimeMillis() - refreshStartTime
+            if (elapsed < 650L) {
+                delay(650L - elapsed)
+            }
         }
         isRefreshingHome = false
     }
@@ -1138,7 +1164,31 @@ fun MainAppScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
+                                        .padding(vertical = 4.dp)
+                                        .pointerInput(Unit) {
+                                            detectVerticalDragGestures(
+                                                onDragStart = { },
+                                                onDragEnd = {
+                                                    if (!isRefreshingHome && homePullOffset >= homePullThreshold) {
+                                                        isRefreshingHome = true
+                                                        refreshHomeTrigger++
+                                                    }
+                                                    homePullOffset = 0f
+                                                },
+                                                onDragCancel = {
+                                                    homePullOffset = 0f
+                                                },
+                                                onVerticalDrag = { change, dragAmount ->
+                                                    if (!isRefreshingHome) {
+                                                        val prev = homePullOffset
+                                                        homePullOffset = (homePullOffset + dragAmount * 0.5f).coerceIn(0f, 160f)
+                                                        if (homePullOffset != prev) {
+                                                            change.consume()
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                        },
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -1543,12 +1593,12 @@ fun MainAppScreen(
                             }
 
                             // Floating circular pull-to-refresh popup badge with dynamic progress ring
-                            val isIndicatorVisible = homePullOffset > 6f || isRefreshingHome
+                            val isIndicatorVisible = homePullOffset > 4f || isRefreshingHome
                             val indicatorOffsetDp by animateFloatAsState(
                                 targetValue = when {
-                                    isRefreshingHome -> 64f
-                                    homePullOffset > 0f -> (10f + (homePullOffset * 0.55f)).coerceAtMost(80f)
-                                    else -> 0f
+                                    isRefreshingHome -> 72f
+                                    homePullOffset > 0f -> (50f + (homePullOffset * 0.45f)).coerceAtMost(115f)
+                                    else -> 40f
                                 },
                                 animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
                                 label = "pull_indicator_offset"
@@ -1559,6 +1609,8 @@ fun MainAppScreen(
                                 enter = fadeIn(tween(140)) + scaleIn(initialScale = 0.5f),
                                 exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.5f),
                                 modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .zIndex(100f)
                                     .fillMaxWidth()
                                     .offset(y = indicatorOffsetDp.dp)
                             ) {
@@ -1572,11 +1624,12 @@ fun MainAppScreen(
                                         shape = CircleShape,
                                         color = if (isReadyToTrigger) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
                                         border = BorderStroke(
-                                            width = if (isReadyToTrigger) 1.5.dp else 1.dp,
-                                            color = if (isReadyToTrigger) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                            width = if (isReadyToTrigger) 2.dp else 1.2.dp,
+                                            color = if (isReadyToTrigger) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
                                         ),
                                         shadowElevation = 10.dp,
-                                        modifier = Modifier.size(44.dp)
+                                        tonalElevation = 6.dp,
+                                        modifier = Modifier.size(46.dp)
                                     ) {
                                         Box(
                                             modifier = Modifier.fillMaxSize(),
@@ -1591,18 +1644,18 @@ fun MainAppScreen(
                                             } else {
                                                 CircularProgressIndicator(
                                                     progress = { progressFraction },
-                                                    modifier = Modifier.size(30.dp),
-                                                    strokeWidth = 2.5.dp,
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                    trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                                    modifier = Modifier.size(32.dp),
+                                                    strokeWidth = 2.8.dp,
+                                                    color = if (isReadyToTrigger) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                                                    trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
                                                 )
                                                 val rotation = progressFraction * 180f
                                                 Icon(
                                                     imageVector = if (isReadyToTrigger) Icons.Default.Refresh else Icons.Default.ArrowDownward,
                                                     contentDescription = null,
-                                                    tint = if (isReadyToTrigger) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                                    tint = if (isReadyToTrigger) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                                     modifier = Modifier
-                                                        .size(17.dp)
+                                                        .size(18.dp)
                                                         .graphicsLayer {
                                                             if (!isReadyToTrigger) rotationZ = rotation
                                                         }

@@ -6,6 +6,18 @@
 -keepclassmembers class kotlinx.serialization.** {
     *** Companion;
 }
+-keepclassmembers class * {
+    @kotlinx.serialization.Serializable <fields>;
+    @kotlinx.serialization.SerialName <fields>;
+}
+-keepclassmembers class * {
+    companion object * {
+        *** serializer(...);
+    }
+}
+-keepclasseswithmembers class * {
+    @kotlinx.serialization.Serializable <init>(...);
+}
 
 # AndroidX Media3 / ExoPlayer
 -keep class androidx.media3.common.** { *; }
@@ -16,6 +28,10 @@
 # OkHttp
 -dontwarn okhttp3.**
 -dontwarn okio.**
+
+# Coil Image Loader
+-keep class coil.** { *; }
+-dontwarn coil.**
 
 # Android Audio Effects (LoudnessEnhancer, DynamicsProcessing)
 -keep class android.media.audiofx.** { *; }

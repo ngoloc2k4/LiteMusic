@@ -105,12 +105,25 @@ object AudioCacheManager {
     @Synchronized
     fun getCache(context: Context): SimpleCache {
         if (simpleCache == null) {
-            enforceCacheLimit(context)
-            val maxBytes = getMaxCacheSizeMb(context).toLong() * 1024L * 1024L
             val cacheDir = File(context.cacheDir, "audio_stream_cache")
+            val maxBytes = getMaxCacheSizeMb(context).toLong() * 1024L * 1024L
             val evictor = LeastRecentlyUsedCacheEvictor(maxBytes)
-            val databaseProvider = StandaloneDatabaseProvider(context)
-            simpleCache = SimpleCache(cacheDir, evictor, databaseProvider)
+            try {
+                enforceCacheLimit(context)
+                val databaseProvider = StandaloneDatabaseProvider(context)
+                simpleCache = SimpleCache(cacheDir, evictor, databaseProvider)
+            } catch (e: Exception) {
+                // If cache directory is corrupted or locked from a previous crash, purge and retry
+                try {
+                    deleteRecursively(cacheDir)
+                    cacheDir.mkdirs()
+                    val databaseProvider = StandaloneDatabaseProvider(context)
+                    simpleCache = SimpleCache(cacheDir, evictor, databaseProvider)
+                } catch (_: Exception) {
+                    // Fallback to simpleCache without standalone database
+                    simpleCache = SimpleCache(cacheDir, evictor)
+                }
+            }
         }
         return simpleCache!!
     }
@@ -128,7 +141,7 @@ object AudioCacheManager {
 
         // Recreate directory and reinitialize
         cacheDir.mkdirs()
-        getCache(context)
+        runCatching { getCache(context) }
         return bytesBefore
     }
 
@@ -143,24 +156,28 @@ object AudioCacheManager {
         val upstreamFactory = OkHttpDataSource.Factory(okHttpClient)
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 
-        val cache = getCache(context)
-        val customKeyFactory = CacheKeyFactory { dataSpec ->
-            val uri = dataSpec.uri
-            val uriStr = uri.toString()
-            if (uriStr.contains("googlevideo.com") || uriStr.contains("youtube.com")) {
-                val id = uri.getQueryParameter("id") ?: uri.getQueryParameter("docid")
-                val itag = uri.getQueryParameter("itag")
-                if (!id.isNullOrEmpty()) {
-                    return@CacheKeyFactory if (!itag.isNullOrEmpty()) "yt_${id}_$itag" else "yt_$id"
+        return try {
+            val cache = getCache(context)
+            val customKeyFactory = CacheKeyFactory { dataSpec ->
+                val uri = dataSpec.uri
+                val uriStr = uri.toString()
+                if (uriStr.contains("googlevideo.com") || uriStr.contains("youtube.com")) {
+                    val id = uri.getQueryParameter("id") ?: uri.getQueryParameter("docid")
+                    val itag = uri.getQueryParameter("itag")
+                    if (!id.isNullOrEmpty()) {
+                        return@CacheKeyFactory if (!itag.isNullOrEmpty()) "yt_${id}_$itag" else "yt_$id"
+                    }
                 }
+                dataSpec.key ?: dataSpec.uri.toString()
             }
-            dataSpec.key ?: dataSpec.uri.toString()
-        }
 
-        return CacheDataSource.Factory()
-            .setCache(cache)
-            .setUpstreamDataSourceFactory(upstreamFactory)
-            .setCacheKeyFactory(customKeyFactory)
-            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+            CacheDataSource.Factory()
+                .setCache(cache)
+                .setUpstreamDataSourceFactory(upstreamFactory)
+                .setCacheKeyFactory(customKeyFactory)
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        } catch (_: Throwable) {
+            upstreamFactory
+        }
     }
 }

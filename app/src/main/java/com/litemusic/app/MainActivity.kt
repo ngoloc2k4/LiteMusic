@@ -140,7 +140,11 @@ import com.litemusic.app.ui.queue.QueueSheet
 class MainActivity : ComponentActivity() {
 
     override fun attachBaseContext(newBase: android.content.Context) {
-        super.attachBaseContext(LocaleHelper.onAttach(newBase))
+        super.attachBaseContext(try {
+            LocaleHelper.onAttach(newBase)
+        } catch (_: Throwable) {
+            newBase
+        })
     }
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
@@ -163,13 +167,34 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         initMediaController()
 
+        // Check for previous crash log and notify user
+        try {
+            val crashPrefs = getSharedPreferences("litemusic_crash_prefs", android.content.Context.MODE_PRIVATE)
+            val lastCrash = crashPrefs.getString("last_crash_log", null)
+            val lastCrashTime = crashPrefs.getLong("last_crash_time", 0L)
+            if (!lastCrash.isNullOrEmpty() && (System.currentTimeMillis() - lastCrashTime) < 5 * 60 * 1000L) {
+                Toast.makeText(
+                    this,
+                    "Phát hiện sự cố lần khởi động trước. Chi tiết lỗi đã lưu tại Download/LiteMusic_crash.txt",
+                    Toast.LENGTH_LONG
+                ).show()
+                crashPrefs.edit().remove("last_crash_time").apply()
+            }
+        } catch (_: Throwable) {}
+
         // Background multi-endpoint latency measurement, country init & anonymous session refresh
-        AnonymousSessionManager.getInstance().updateCountryCode(ThemePreferences.getEffectiveCountryCode(this))
-        EndpointHealthManager.getInstance().startBackgroundPinger(lifecycleScope)
-        AnonymousSessionManager.getInstance().ensureVisitorDataAsync(lifecycleScope)
+        try {
+            AnonymousSessionManager.getInstance().updateCountryCode(ThemePreferences.getEffectiveCountryCode(this))
+            EndpointHealthManager.getInstance().startBackgroundPinger(lifecycleScope)
+            AnonymousSessionManager.getInstance().ensureVisitorDataAsync(lifecycleScope)
+        } catch (e: Throwable) {
+            android.util.Log.e("MainActivity", "Failed to start background network services", e)
+        }
 
         if (ThemePreferences.isDebugMode(this)) {
-            DebugLogServer.start(lifecycleScope)
+            try {
+                DebugLogServer.start(lifecycleScope)
+            } catch (_: Throwable) {}
         }
 
         setContent {
@@ -262,11 +287,19 @@ class MainActivity : ComponentActivity() {
     private var currentPlayingSong by mutableStateOf<Song?>(null)
 
     private fun initMediaController() {
-        val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
-        controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
-        controllerFuture?.addListener({
-            mediaController = controllerFuture?.get()
-        }, ContextCompat.getMainExecutor(this))
+        try {
+            val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
+            controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
+            controllerFuture?.addListener({
+                try {
+                    mediaController = controllerFuture?.get()
+                } catch (e: Throwable) {
+                    android.util.Log.e("MainActivity", "Failed to retrieve MediaController from future", e)
+                }
+            }, ContextCompat.getMainExecutor(this))
+        } catch (e: Throwable) {
+            android.util.Log.e("MainActivity", "Failed to initialize MediaController", e)
+        }
     }
 
     private suspend fun searchSongs(query: String, source: AudioSource): List<Song> {

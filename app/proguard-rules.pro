@@ -7,16 +7,8 @@
     *** Companion;
 }
 -keepclassmembers class * {
-    @kotlinx.serialization.Serializable <fields>;
-    @kotlinx.serialization.SerialName <fields>;
-}
--keepclassmembers class * {
-    companion object * {
-        *** serializer(...);
-    }
-}
--keepclasseswithmembers class * {
-    @kotlinx.serialization.Serializable <init>(...);
+    *** Companion;
+    *** serializer(...);
 }
 
 # AndroidX Media3 / ExoPlayer
